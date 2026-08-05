@@ -105,12 +105,35 @@ public struct SpeechModelCatalogue: Sendable {
         guard let resolved = await resolve(locale) else {
             throw TranscriptionFailure.languageUnavailable(locale.identifier)
         }
+
+        // Reserved before it is fetched, and this order is not optional.
+        //
+        // Downloading the assets does not make a language usable on its own.
+        // Fetched without reserving the locale, the download runs to completion
+        // and the language stays unusable: `installedLocales` does not list it,
+        // `status(forModules:)` still answers `.supported`, and
+        // `bestAvailableAudioFormat` returns nil, so a dictation in it cannot
+        // start. Reserving it afterwards fixed all three without fetching
+        // anything again — but doing it first means an interrupted download
+        // leaves a language that is merely incomplete, rather than one that is
+        // complete and still refuses to work.
+        await reserve(resolved)
+
         guard let request = try await AssetInventory
             .assetInstallationRequest(supporting: [Self.module(for: resolved)]) else {
             return                     // nothing to fetch
         }
         progress?(request.progress)
         try await request.downloadAndInstall()
+    }
+
+    /// How many languages may be held at once, which is a system limit rather
+    /// than one of Diktaf's.
+    public static var maximumReservedLocales: Int { AssetInventory.maximumReservedLocales }
+
+    /// The languages this application has asked the system to keep.
+    public func reservedLocales() async -> [Locale] {
+        await AssetInventory.reservedLocales
     }
 
     /// Asks the system to keep this language's model rather than reclaiming it.

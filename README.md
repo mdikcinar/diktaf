@@ -42,9 +42,9 @@ paste. The reply is shown, and the conversation can be continued or cleared.
 
 Diktaf transcribes with the model behind macOS's own dictation, which covers 54
 languages — Turkish, Russian, Polish, Arabic, Hindi, the Nordic languages and the
-rest. Only the ones you have used are on disk; the first time you pick a new one,
-Settings → General offers to download it, and until it has finished that language
-cannot be dictated.
+rest. Pick yours in Settings → General; a ✓ beside a language means its model is
+already on this Mac, and anything else offers a Download and says when it is
+ready. Nothing is sent anywhere either way: the recogniser runs here.
 
 (macOS has a second recogniser, the one meant for transcribing recordings. It
 covers 30 languages and has no Turkish. Diktaf does not use it, and

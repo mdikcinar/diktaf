@@ -38,6 +38,10 @@ final class AppModel {
     private(set) var supportedLocales: [Locale] = []
     private(set) var modelInstallation: (locale: Locale, progress: Progress)?
 
+    /// Whether the chosen language can be dictated in. Nil until it is known,
+    /// which is the difference between "no model" and "not asked yet".
+    private(set) var languageState: SpeechModelCatalogue.ModelState?
+
     // MARK: - The pieces
 
     private let settingsService: SettingsService
@@ -104,7 +108,11 @@ final class AppModel {
             .map { "\($0.rawValue)=\(permissions[$0]?.rawValue ?? "?")" }
             .joined(separator: " "))
         await refreshAgentAvailability()
+        await catalogue.reserve(chosenLocale)
         await refreshLocales()
+        Diagnostics.event(
+            "language \(chosenLocale.identifier(.bcp47)): "
+            + String(describing: languageState ?? .notInstalled))
 
         Task { await watchSession() }
     }
@@ -175,7 +183,27 @@ final class AppModel {
 
     // MARK: - Settings
 
+    /// Applies a change here first, then stores it.
+    ///
+    /// The order matters to every control in the settings window. Storing is
+    /// asynchronous, so a view that redraws from the stored value between the
+    /// click and the write shows the old one — a picker that springs back, a
+    /// field that will not take a character. Applied on this side first, the
+    /// interface always shows what the user just chose, and the store catches up.
     func update(_ change: @escaping @Sendable (inout Settings) -> Void) {
+        let previous = settings
+        var draft = settings
+        change(&draft)
+        guard draft != previous else { return }
+        settings = draft
+
+        if draft.language != previous.language {
+            Task { await applyLanguage(draft.language) }
+        }
+        if draft.bindings != previous.bindings {
+            registerShortcuts()
+        }
+
         Task {
             do {
                 try await settingsService.update(change)
@@ -183,18 +211,22 @@ final class AppModel {
             } catch {
                 settingsProblem = String(describing: error)
             }
-            let updated = await settingsService.settings
-            let languageChanged = updated.language != settings.language
-            let keysChanged = updated.bindings != settings.bindings
-            settings = updated
-
-            if languageChanged {
-                await transcriber.use(locale: updated.language.map(Locale.init(identifier:)))
-            }
-            if keysChanged {
-                registerShortcuts()
-            }
         }
+    }
+
+    private func applyLanguage(_ identifier: String?) async {
+        await transcriber.use(locale: identifier.map(Locale.init(identifier:)))
+
+        // Choosing a language is the moment to claim it. A model that is on disk
+        // but not reserved by this application does not count as installed, and
+        // reserving it after a dictation has started — which is where this used
+        // to happen — is too late, because the dictation cannot start.
+        await catalogue.reserve(chosenLocale)
+
+        await refreshLocales()
+        Diagnostics.event(
+            "language \(chosenLocale.identifier(.bcp47)): "
+            + String(describing: languageState ?? .notInstalled))
     }
 
     func resetSettings() {
@@ -300,9 +332,11 @@ final class AppModel {
     func refreshLocales() async {
         installedLocales = await catalogue.installedLocales()
         supportedLocales = await catalogue.supportedLocales()
+        await refreshLanguageState()
     }
 
     func installModel(for locale: Locale) async {
+        Diagnostics.event("installing the speech model for \(locale.identifier(.bcp47))")
         do {
             try await catalogue.install(locale) { [weak self] progress in
                 Task { @MainActor [weak self] in
@@ -317,14 +351,45 @@ final class AppModel {
         }
     }
 
-    /// Whether the language the user has chosen can actually be transcribed.
-    var languageNeedsAModel: Bool {
-        let wanted = settings.language.map(Locale.init(identifier:)) ?? Locale.current
-        guard !installedLocales.isEmpty else { return false }   // not yet known
-        return !installedLocales.contains {
-            $0.identifier(.bcp47) == wanted.identifier(.bcp47)
-                || $0.language.languageCode == wanted.language.languageCode
-        }
+    /// Whether the language the user has chosen can be transcribed now, later, or
+    /// not at all.
+    ///
+    /// Asked of the catalogue rather than worked out from `installedLocales`
+    /// here. Two places deciding the same thing is how they come to disagree, and
+    /// the catalogue is the one that knows what the framework means by it.
+    func refreshLanguageState() async {
+        languageState = await catalogue.state(of: chosenLocale)
+    }
+
+    /// The locale a dictation would actually use.
+    var chosenLocale: Locale {
+        settings.language.map(Locale.init(identifier:)) ?? Locale.current
+    }
+
+    /// The languages to offer, in an order a person can find one in.
+    ///
+    /// Sorted by the name they are shown under rather than left in the order the
+    /// framework returns them, and marked where the model is already on disk —
+    /// which is the difference between picking a language and picking a download.
+    var languageChoices: [LanguageChoice] {
+        let installed = Set(installedLocales.map { $0.identifier(.bcp47) })
+        return supportedLocales
+            .map { locale in
+                let identifier = locale.identifier(.bcp47)
+                return LanguageChoice(
+                    identifier: identifier,
+                    label: installed.contains(identifier)
+                        ? "✓ \(locale.readableName)"
+                        : locale.readableName
+                )
+            }
+            .sorted { $0.label.localizedCaseInsensitiveCompare($1.label) == .orderedAscending }
+    }
+
+    struct LanguageChoice: Identifiable, Hashable {
+        let identifier: String
+        let label: String
+        var id: String { identifier }
     }
 
     private func refreshAgentAvailability() async {

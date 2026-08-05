@@ -112,6 +112,15 @@ anyway. `installedLocales` is the authority on what can be transcribed right now
 Believing the first one meant reporting every language as missing and refusing
 every dictation on a machine that was perfectly ready.
 
+**Downloading a model does not make its language usable.** Fetch the assets
+without reserving the locale and the download runs to completion while the
+language stays unusable: `installedLocales` does not list it, the status stays
+`.supported`, and `bestAvailableAudioFormat` returns nil. `AssetInventory.reserve`
+fixes all three without fetching anything again, so `install` reserves first, and
+choosing a language in the settings reserves it too — reserving only after a
+dictation has started, which is where this used to happen, is too late, because
+the dictation is what cannot start.
+
 A third, smaller trap: `supportedLocale(equivalentTo:)` normalises an identifier
 without saying whether it is supported. Ask it about Turkish and it answers
 `tr-TR` whether or not Turkish is on the list, so membership is checked against

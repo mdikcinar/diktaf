@@ -107,12 +107,23 @@ private struct Harness {
     let journal: Journal
     let session: DictationSession
 
+    /// `sleep` is what the deadline waits on, and the default never returns.
+    ///
+    /// It has to. The deadline and the refinement are two children of the same
+    /// group and the first to finish wins, so a sleep that returns immediately
+    /// makes every test about a *successful* cleanup a race — one this suite won
+    /// three times by luck before losing. Never returning means the refiner
+    /// always wins; the one test about the deadline passes an instant sleep so
+    /// that it always loses.
     init(
         updates: [TranscriptUpdate] = [TranscriptUpdate(settled: "hello there", volatile: "")],
         transcriber: FakeTranscriber? = nil,
         refiner: FakeRefiner? = FakeRefiner(.cleaned("Hello there.")),
         keyboard: RecordingKeyboard? = nil,
-        settings: Settings = .defaults
+        settings: Settings = .defaults,
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { _ in
+            try await Task.sleep(for: .seconds(3600))
+        }
     ) {
         let journal = Journal()
         self.journal = journal
@@ -122,8 +133,6 @@ private struct Harness {
         self.keyboard = keyboard ?? RecordingKeyboard(journal: journal)
         self.focus = FakeFocusGuard(journal: journal)
 
-        // Instant, so a twenty-second deadline costs the test nothing while the
-        // race it is there to settle is still the real one.
         self.session = DictationSession(
             transcriber: self.transcriber,
             refiner: refiner,
@@ -131,7 +140,7 @@ private struct Harness {
             keyboard: self.keyboard,
             focus: self.focus,
             settings: { settings },
-            sleep: { _ in await Task.yield() }
+            sleep: sleep
         )
     }
 
@@ -247,7 +256,10 @@ struct DictationSessionTests {
     func fallsBackWhenCleanupHangs() async throws {
         var settings = Settings.defaults
         settings.refinerTimeoutSeconds = 7
-        let harness = Harness(refiner: FakeRefiner(.hanging), settings: settings)
+        // An instant deadline, so the clock always beats the refiner rather than
+        // racing it.
+        let harness = Harness(refiner: FakeRefiner(.hanging), settings: settings,
+                              sleep: { _ in await Task.yield() })
         let log = await harness.log()
 
         await harness.session.toggle()

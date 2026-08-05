@@ -100,3 +100,44 @@ struct SpeechModelCatalogueTests {
         }, "a model is installed for a language that is not on the supported list")
     }
 }
+
+/// Reserving a language, which is what turns a download into a usable language.
+///
+/// Downloading the assets is not enough on its own. Fetched without the locale
+/// being reserved, the download completes and the language stays unusable:
+/// `installedLocales` does not list it, the status stays `.supported`, and
+/// `bestAvailableAudioFormat` returns nil — so a dictation in it cannot start.
+/// Reserving it then fixed all three without fetching anything again, which is
+/// why `install` reserves first.
+///
+/// What these can check is the reservation itself. The download cannot be tested
+/// here: it is hundreds of megabytes and it changes the machine.
+@Suite("Reserving a language")
+struct LocaleReservationTests {
+    private let catalogue = SpeechModelCatalogue()
+
+    /// Reserving one that is already installed, so the test claims nothing the
+    /// machine was not already using.
+    @Test("reserving a language that is installed succeeds and is remembered")
+    func reservesAnInstalledLanguage() async {
+        let installed = await catalogue.installedLocales()
+        guard let first = installed.first else { return }
+
+        #expect(await catalogue.reserve(first))
+        let reserved = await catalogue.reservedLocales().map { $0.identifier(.bcp47) }
+        #expect(reserved.contains(first.identifier(.bcp47)))
+    }
+
+    @Test("there is a limit, and it is the system's")
+    func hasALimit() async {
+        #expect(SpeechModelCatalogue.maximumReservedLocales > 0)
+        #expect(await catalogue.reservedLocales().count
+                <= SpeechModelCatalogue.maximumReservedLocales)
+    }
+
+    /// Reserving one that cannot be transcribed is not something to attempt.
+    @Test("an unsupported language is not reserved")
+    func refusesUnsupportedLanguages() async {
+        #expect(await catalogue.reserve(Locale(identifier: "zz-ZZ")) == false)
+    }
+}

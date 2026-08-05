@@ -40,34 +40,28 @@ private struct GeneralTab: View {
 
     var body: some View {
         Form {
-            Section("Language") {
+            Section {
                 Picker("Dictate in", selection: languageBinding) {
-                    Text("Follow the system").tag(String?.none)
-                    ForEach(model.supportedLocales, id: \.identifier) { locale in
-                        Text(locale.localizedString ?? locale.identifier)
-                            .tag(String?.some(locale.identifier(.bcp47)))
+                    Text("Follow the system — \(model.chosenLocale.readableName)")
+                        .tag(String?.none)
+                    Divider()
+                    ForEach(model.languageChoices, id: \.identifier) { choice in
+                        Text(choice.label).tag(String?.some(choice.identifier))
                     }
                 }
 
-                if model.languageNeedsAModel {
-                    // Said plainly rather than left to fail at the first
-                    // dictation, because the download takes minutes and a
-                    // dictation that silently waits for one looks broken.
-                    LabeledContent("Speech model") {
-                        if let installing = model.modelInstallation {
-                            ProgressView(installing.progress)
-                                .progressViewStyle(.linear)
-                        } else {
-                            Button("Download") {
-                                Task {
-                                    await model.installModel(
-                                        for: model.settings.language
-                                            .map(Locale.init(identifier:)) ?? .current)
-                                }
-                            }
-                        }
-                    }
-                }
+                LanguageStateRow(model: model)
+            } header: {
+                Text("Language")
+            } footer: {
+                Text("""
+                Transcription is done by the speech recogniser built into macOS, \
+                on this Mac — the same model the system's own dictation uses. It \
+                supports \(model.supportedLocales.count) languages, and keeps on \
+                disk only the ones you have used. A ✓ means the model is already \
+                there.
+                """)
+                .font(.caption)
             }
 
             Section("Where the text goes") {
@@ -120,6 +114,49 @@ private struct GeneralTab: View {
     private var overlayBinding: Binding<Bool> {
         Binding(get: { model.settings.showOverlay },
                 set: { value in model.update { $0.showOverlay = value } })
+    }
+}
+
+/// Whether the chosen language can be dictated in, and what to do if not.
+///
+/// Stated rather than left to fail at the first dictation: a model takes minutes
+/// to fetch, and a dictation quietly waiting for one is indistinguishable from a
+/// dictation that is broken.
+private struct LanguageStateRow: View {
+    let model: AppModel
+
+    var body: some View {
+        switch model.languageState {
+        case .installed:
+            LabeledContent("Speech model") {
+                Label("Ready", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            }
+        case .notInstalled:
+            LabeledContent("Speech model") {
+                if let installing = model.modelInstallation {
+                    ProgressView(installing.progress)
+                        .progressViewStyle(.linear)
+                        .frame(width: 200)
+                } else {
+                    Button("Download") {
+                        Task { await model.installModel(for: model.chosenLocale) }
+                    }
+                }
+            }
+        case .downloading:
+            LabeledContent("Speech model") {
+                Label("Downloading in the background", systemImage: "arrow.down.circle")
+                    .foregroundStyle(.secondary)
+            }
+        case .unsupported:
+            LabeledContent("Speech model") {
+                Label("Not available for this language", systemImage: "xmark.circle")
+                    .foregroundStyle(.orange)
+            }
+        case nil:
+            LabeledContent("Speech model") { ProgressView().controlSize(.small) }
+        }
     }
 }
 
@@ -441,7 +478,13 @@ extension BindingProblem {
 }
 
 extension Locale {
-    var localizedString: String? {
-        Locale.current.localizedString(forIdentifier: identifier)
+    /// "Turkish (Turkey)" rather than "tr_TR", in the reader's own language.
+    ///
+    /// Falls back to the identifier rather than to nothing: an unfamiliar code in
+    /// a menu is worse than an ugly one, but a blank row is worse than both.
+    var readableName: String {
+        Locale.current.localizedString(forIdentifier: identifier(.bcp47))
+            ?? Locale.current.localizedString(forIdentifier: identifier)
+            ?? identifier
     }
 }

@@ -42,7 +42,7 @@ struct MenuBarContent: View {
             }
         }
 
-        if model.languageNeedsAModel {
+        if model.languageState == .notInstalled {
             Button("Download the speech model…") { openSettings() }
         }
 
