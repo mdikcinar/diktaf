@@ -22,31 +22,36 @@ struct ShortcutRecorder: View {
     @State private var monitor: Any?
 
     var body: some View {
-        Button {
-            isRecording ? stopRecording() : startRecording()
-        } label: {
-            Text(label)
-                .font(.body.monospaced())
-                .foregroundStyle(isRecording ? Color.accentColor : Color.primary)
-                .frame(minWidth: 170, alignment: .center)
-                .contentShape(.rect)
-        }
-        .buttonStyle(.bordered)
-        .help(isRecording
-              ? "Press a combination, or Esc to keep the current one"
-              : "Click, then press the combination you want")
-        .overlay(alignment: .trailing) {
-            if combination != nil, !isRecording {
-                Button {
-                    onChange(nil)
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.borderless)
-                .help("Remove this shortcut")
-                .offset(x: 20)
+        // Laid out beside the field rather than overlaid on it. An overlay with an
+        // offset is drawn outside the row's own width, so the window clipped the
+        // button off at its edge.
+        HStack(spacing: 6) {
+            Button {
+                isRecording ? stopRecording() : startRecording()
+            } label: {
+                Text(label)
+                    .font(.body.monospaced())
+                    .foregroundStyle(isRecording ? Color.accentColor : Color.primary)
+                    .frame(minWidth: 150, alignment: .center)
+                    .contentShape(.rect)
             }
+            .buttonStyle(.bordered)
+            .help(isRecording
+                  ? "Press a combination, or Esc to keep the current one"
+                  : "Click, then press the combination you want")
+
+            Button {
+                onChange(nil)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.tertiary)
+            }
+            .buttonStyle(.borderless)
+            .help("Remove this shortcut")
+            // Kept in the layout while it is unusable, so the field beside it does
+            // not shift about as shortcuts are set and cleared.
+            .opacity(combination != nil && !isRecording ? 1 : 0)
+            .disabled(combination == nil || isRecording)
         }
         .onDisappear(perform: stopRecording)
     }

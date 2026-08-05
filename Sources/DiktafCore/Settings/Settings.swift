@@ -43,7 +43,17 @@ public struct Settings: Codable, Sendable, Equatable {
     /// past that the user has already started typing it out by hand.
     public var refinerTimeoutSeconds: Int
 
-    /// Which model the agent should use, or nil for its own default.
+    /// Which model cleans up a transcript, or nil for the command's own default.
+    ///
+    /// Separate from `agentModel` because the two jobs want opposite things.
+    /// Cleaning up one sentence happens on every dictation and is worth being
+    /// fast and cheap; answering a question happens when asked and is worth
+    /// being good. Sharing one setting meant either paying for the large model
+    /// on every sentence or asking the small one to reason.
+    public var cleanupModel: String?
+
+    /// Which model answers when you ask the agent something, or nil for the
+    /// command's own default.
     public var agentModel: String?
 
     public init(
@@ -55,6 +65,7 @@ public struct Settings: Codable, Sendable, Equatable {
         agentEnabled: Bool = true,
         showOverlay: Bool = true,
         refinerTimeoutSeconds: Int = 20,
+        cleanupModel: String? = "haiku",
         agentModel: String? = nil
     ) {
         self.language = language
@@ -65,6 +76,7 @@ public struct Settings: Codable, Sendable, Equatable {
         self.agentEnabled = agentEnabled
         self.showOverlay = showOverlay
         self.refinerTimeoutSeconds = refinerTimeoutSeconds
+        self.cleanupModel = cleanupModel
         self.agentModel = agentModel
     }
 
@@ -90,7 +102,8 @@ public struct Settings: Codable, Sendable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case language, cleanupEnabled, rules, delivery, bindings
-        case agentEnabled, showOverlay, refinerTimeoutSeconds, agentModel
+        case agentEnabled, showOverlay, refinerTimeoutSeconds
+        case cleanupModel, agentModel
     }
 
     public init(from decoder: any Decoder) throws {
@@ -111,6 +124,10 @@ public struct Settings: Codable, Sendable, Equatable {
             ?? fallback.showOverlay
         refinerTimeoutSeconds = try box.decodeIfPresent(Int.self, forKey: .refinerTimeoutSeconds)
             ?? fallback.refinerTimeoutSeconds
+        // Absent in a file written before the two were told apart, in which case
+        // the default is what it always effectively was.
+        cleanupModel = try box.decodeIfPresent(String.self, forKey: .cleanupModel)
+            ?? fallback.cleanupModel
         agentModel = try box.decodeIfPresent(String.self, forKey: .agentModel)
     }
 }

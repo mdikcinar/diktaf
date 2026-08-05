@@ -13,6 +13,42 @@ public enum BindingProblem: Sendable, Equatable {
     /// A combination with no modifiers at all, which would swallow the key
     /// everywhere — typing "d" would start a dictation.
     case noModifiers(HotkeyAction, KeyCombination)
+
+    /// A combination the system takes first, so it never reaches Diktaf.
+    ///
+    /// This one cannot be detected by trying: registering it succeeds, and then
+    /// nothing happens when it is pressed, because macOS has already consumed
+    /// the key. Without saying so, the only symptom is a shortcut that does not
+    /// work and no reason given anywhere.
+    case reservedBySystem(HotkeyAction, KeyCombination, String)
+}
+
+extension KeyCombination {
+    /// What macOS keeps for itself, and what it uses it for.
+    ///
+    /// Not a complete list — it cannot be, since these are all rebindable in
+    /// System Settings and somebody may well have freed one up. It covers the
+    /// defaults, which is where the surprises come from.
+    public var systemOwner: String? {
+        switch (key, modifiers) {
+        case ("space", [.control]), ("space", [.control, .shift]):
+            "switching input source"
+        case ("space", [.command]):
+            "Spotlight"
+        case ("space", [.command, .option]):
+            "Finder search"
+        case ("tab", [.command]), ("tab", [.command, .shift]):
+            "switching application"
+        case ("q", [.command]), ("w", [.command]), ("h", [.command]),
+             ("m", [.command]), ("c", [.command]), ("v", [.command]),
+             ("x", [.command]), ("z", [.command]), ("a", [.command]):
+            "an editing or window command every application has"
+        case ("escape", [.command, .option]):
+            "Force Quit"
+        default:
+            nil
+        }
+    }
 }
 
 extension Array where Element == HotkeyBinding {
@@ -38,6 +74,13 @@ extension Array where Element == HotkeyBinding {
         for binding in self
         where binding.combination.modifiers.isEmpty && !binding.combination.isMouseButton {
             problems.append(.noModifiers(binding.action, binding.combination))
+        }
+
+        for binding in self {
+            if let owner = binding.combination.systemOwner {
+                problems.append(
+                    .reservedBySystem(binding.action, binding.combination, owner))
+            }
         }
 
         return problems

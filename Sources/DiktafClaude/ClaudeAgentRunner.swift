@@ -10,7 +10,7 @@ import Foundation
 /// for.
 public struct ClaudeAgentRunner: AgentRunner {
     private let executablePath: String?
-    private let model: String?
+    private let model: @Sendable () async -> String?
     private let timeout: Duration
     private let runner: any ProcessRunner
 
@@ -19,13 +19,24 @@ public struct ClaudeAgentRunner: AgentRunner {
         model: String? = nil,
         timeoutSeconds: Int = 300
     ) {
+        self.init(executablePath: executablePath, model: { model },
+                  timeoutSeconds: timeoutSeconds, runner: SystemProcessRunner())
+    }
+
+    /// See `ClaudeRefiner`: asked at every turn, so changing it in the settings
+    /// takes effect on the next question rather than the next launch.
+    public init(
+        executablePath: String? = nil,
+        model: @escaping @Sendable () async -> String?,
+        timeoutSeconds: Int = 300
+    ) {
         self.init(executablePath: executablePath, model: model,
                   timeoutSeconds: timeoutSeconds, runner: SystemProcessRunner())
     }
 
     init(
         executablePath: String?,
-        model: String?,
+        model: @escaping @Sendable () async -> String?,
         timeoutSeconds: Int,
         runner: any ProcessRunner
     ) {
@@ -46,7 +57,7 @@ public struct ClaudeAgentRunner: AgentRunner {
         }
 
         let invocation = ClaudeInvocation(
-            purpose: .conversation(resuming: sessionID), model: model)
+            purpose: .conversation(resuming: sessionID), model: await model())
 
         let outcome: ProcessOutcome
         do {

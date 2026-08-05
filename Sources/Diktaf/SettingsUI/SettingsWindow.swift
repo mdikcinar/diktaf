@@ -153,11 +153,28 @@ private struct CleanupTab: View {
             Section {
                 Toggle("Clean up what I dictate", isOn: enabledBinding)
                 Text("""
-                Cleanup runs through the claude command on this Mac. If it fails \
-                or takes too long, the raw transcript is pasted instead.
+                What macOS heard goes to the claude command on this Mac to have \
+                the rules below applied to it, and the result is what gets \
+                pasted. It does not do the transcription — that is Apple's \
+                recogniser, and it happens either way. Switch this off and the \
+                raw transcript is pasted as it came. If it fails or takes too \
+                long, that is what happens anyway.
                 """)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            }
+
+            Section {
+                ModelPicker(title: "Clean up with", selection: model.settings.cleanupModel) {
+                    chosen in model.update { $0.cleanupModel = chosen }
+                }
+            } footer: {
+                Text("""
+                This runs on every dictation, so it is worth being fast. The \
+                smallest model is a second or two quicker than the largest and \
+                does this job perfectly well.
+                """)
+                .font(.caption)
             }
 
             Section("Rules") {
@@ -170,9 +187,15 @@ private struct CleanupTab: View {
             }
 
             Section("Anything else") {
-                TextEditor(text: extraBinding)
-                    .frame(minHeight: 60)
-                    .font(.body)
+                CommittingTextField(
+                    placeholder: "Anything the rules above do not cover",
+                    value: model.settings.rules.extraInstruction ?? "",
+                    axis: .vertical
+                ) { edited in
+                    let trimmed = edited.trimmingCharacters(in: .whitespacesAndNewlines)
+                    model.update { $0.rules.extraInstruction = trimmed.isEmpty ? nil : trimmed }
+                }
+                .lineLimit(3...)
                 Text("Free-form. A name it keeps mishearing, a house style, a word to avoid.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -195,13 +218,6 @@ private struct CleanupTab: View {
     private var enabledBinding: Binding<Bool> {
         Binding(get: { model.settings.cleanupEnabled },
                 set: { value in model.update { $0.cleanupEnabled = value } })
-    }
-
-    private var extraBinding: Binding<String> {
-        Binding(get: { model.settings.rules.extraInstruction ?? "" },
-                set: { value in
-                    model.update { $0.rules.extraInstruction = value.isEmpty ? nil : value }
-                })
     }
 
     private var timeoutBinding: Binding<Int> {
@@ -227,15 +243,17 @@ private struct RuleRow: View {
                 }))
             .labelsHidden()
 
-            TextField("What should be done", text: Binding(
-                get: { rule.text },
-                set: { value in
-                    model.update { settings in
-                        guard let index = settings.rules.rules
-                            .firstIndex(where: { $0.id == rule.id }) else { return }
-                        settings.rules.rules[index].text = value
-                    }
-                }), axis: .vertical)
+            CommittingTextField(
+                placeholder: "What should be done",
+                value: rule.text,
+                axis: .vertical
+            ) { edited in
+                model.update { settings in
+                    guard let index = settings.rules.rules
+                        .firstIndex(where: { $0.id == rule.id }) else { return }
+                    settings.rules.rules[index].text = edited
+                }
+            }
             .textFieldStyle(.plain)
 
             Button(role: .destructive) {
@@ -321,7 +339,27 @@ private struct AgentTab: View {
     var body: some View {
         Form {
             Section {
+                Text("""
+                Dictation puts text where you were typing. The agent is the other \
+                thing you might want to do with your voice: ask a question and \
+                read the answer.
+                """)
+                Text("""
+                Press the agent key, say what you want, press it again. What you \
+                said becomes the question — it is not cleaned up first and it is \
+                not pasted anywhere. The reply opens in the Agent window, and the \
+                next question continues the same conversation until you clear it.
+                """)
+                .foregroundStyle(.secondary)
+            } header: {
+                Text("What this is")
+            }
+
+            Section("Turn it on") {
                 Toggle("Let me ask the agent by voice", isOn: enabledBinding)
+                if let key = model.settings.combination(for: .agent) {
+                    LabeledContent("The key", value: key.displayName)
+                }
                 LabeledContent("The claude command") {
                     if model.agentAvailable {
                         Label("Found", systemImage: "checkmark.circle.fill")
@@ -331,25 +369,22 @@ private struct AgentTab: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-            } footer: {
-                Text("""
-                Diktaf uses the claude command you are already signed in to. \
-                There is no API key to enter, and nothing is sent anywhere you \
-                have not already agreed to.
-                """)
-                .font(.caption)
             }
 
-            Section("Model") {
-                TextField("haiku", text: modelBinding)
+            Section {
+                ModelPicker(title: "Answer with", selection: model.settings.agentModel) {
+                    chosen in model.update { $0.agentModel = chosen }
+                }
+            } header: {
+                Text("Model")
+            } footer: {
                 Text("""
-                An alias like haiku, sonnet or opus, or a full model name. Blank \
-                uses whatever the command defaults to. Cleaning up one sentence \
-                does not need the largest model, and the smaller ones are \
-                seconds faster on every dictation.
+                This one answers your questions. It has nothing to do with \
+                transcription — the speech recognition is Apple's and runs on this \
+                Mac — and nothing to do with cleaning up dictation, which has its \
+                own model on the Cleanup tab.
                 """)
                 .font(.caption)
-                .foregroundStyle(.secondary)
             }
 
             Section {
@@ -364,13 +399,6 @@ private struct AgentTab: View {
     private var enabledBinding: Binding<Bool> {
         Binding(get: { model.settings.agentEnabled },
                 set: { value in model.update { $0.agentEnabled = value } })
-    }
-
-    private var modelBinding: Binding<String> {
-        Binding(get: { model.settings.agentModel ?? "" },
-                set: { value in
-                    model.update { $0.agentModel = value.isEmpty ? nil : value }
-                })
     }
 }
 
@@ -403,6 +431,11 @@ extension BindingProblem {
             "\(combination.displayName) is set for \(actions.map(\.label).joined(separator: " and "))."
         case .noModifiers(let action, let combination):
             "\(action.label) is set to \(combination.displayName), which would swallow that key everywhere."
+        case .reservedBySystem(let action, let combination, let owner):
+            """
+            \(combination.displayName) will not reach Diktaf: macOS uses it for \
+            \(owner). \(action.label) needs another combination.
+            """
         }
     }
 }

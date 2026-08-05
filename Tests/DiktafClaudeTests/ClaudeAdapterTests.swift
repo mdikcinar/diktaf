@@ -206,7 +206,7 @@ struct ClaudeInvocationTests {
 struct ClaudeRefinerTests {
 
     private func refiner(_ runner: FakeProcessRunner, timeoutSeconds: Int = 20) -> ClaudeRefiner {
-        ClaudeRefiner(executablePath: realExecutable, model: "haiku",
+        ClaudeRefiner(executablePath: realExecutable, model: { "haiku" },
                       timeoutSeconds: timeoutSeconds, runner: runner)
     }
 
@@ -236,7 +236,7 @@ struct ClaudeRefinerTests {
     @Test("a missing command is reported as unavailable, not as a failure")
     func reportsMissingCommand() async {
         let refiner = ClaudeRefiner(
-            executablePath: "/nowhere/claude", model: nil, timeoutSeconds: 5,
+            executablePath: "/nowhere/claude", model: { nil }, timeoutSeconds: 5,
             runner: FakeProcessRunner(outcome(recordedSuccess)))
 
         await #expect(throws: RefinementFailure.agentUnavailable(
@@ -330,7 +330,7 @@ struct ClaudeRefinerTests {
 struct ClaudeAgentRunnerTests {
 
     private func agent(_ runner: FakeProcessRunner) -> ClaudeAgentRunner {
-        ClaudeAgentRunner(executablePath: realExecutable, model: nil,
+        ClaudeAgentRunner(executablePath: realExecutable, model: { nil },
                           timeoutSeconds: 300, runner: runner)
     }
 
@@ -386,7 +386,7 @@ struct ClaudeAgentRunnerTests {
 
         #expect(await agent(runner).isAvailable())
         #expect(await ClaudeAgentRunner(
-            executablePath: "/nowhere/claude", model: nil, timeoutSeconds: 1,
+            executablePath: "/nowhere/claude", model: { nil }, timeoutSeconds: 1,
             runner: runner).isAvailable() == false)
     }
 

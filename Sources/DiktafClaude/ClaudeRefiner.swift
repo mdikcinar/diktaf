@@ -10,7 +10,7 @@ import Foundation
 /// cleanup of the hour pays for it and the rest do not.
 public struct ClaudeRefiner: TextRefiner {
     private let executablePath: String?
-    private let model: String?
+    private let model: @Sendable () async -> String?
     private let timeout: Duration
     private let runner: any ProcessRunner
 
@@ -25,13 +25,27 @@ public struct ClaudeRefiner: TextRefiner {
         model: String? = "haiku",
         timeoutSeconds: Int = 20
     ) {
+        self.init(executablePath: executablePath, model: { model },
+                  timeoutSeconds: timeoutSeconds, runner: SystemProcessRunner())
+    }
+
+    /// The model as something to ask rather than something fixed.
+    ///
+    /// Built once and used for as long as the application runs, so a model read
+    /// at construction is the model from before the user changed it — which is
+    /// the same as the setting not working at all.
+    public init(
+        executablePath: String? = nil,
+        model: @escaping @Sendable () async -> String?,
+        timeoutSeconds: Int = 20
+    ) {
         self.init(executablePath: executablePath, model: model,
                   timeoutSeconds: timeoutSeconds, runner: SystemProcessRunner())
     }
 
     init(
         executablePath: String?,
-        model: String?,
+        model: @escaping @Sendable () async -> String?,
         timeoutSeconds: Int,
         runner: any ProcessRunner
     ) {
@@ -48,7 +62,7 @@ public struct ClaudeRefiner: TextRefiner {
         }
 
         let invocation = ClaudeInvocation(
-            purpose: .cleanup(instruction: instruction), model: model)
+            purpose: .cleanup(instruction: instruction), model: await model())
 
         let outcome: ProcessOutcome
         do {

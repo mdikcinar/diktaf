@@ -177,9 +177,12 @@ struct BindingValidationTests {
         #expect(Settings.defaultBindings.problems().isEmpty)
     }
 
+    /// Ctrl+Alt rather than Ctrl: plain Ctrl+Space is reserved by the system, so
+    /// it would raise that problem as well and this test would be measuring two
+    /// things at once.
     @Test("the same action twice on the same key is still one problem")
     func reportsEachDuplicateOnce() {
-        let shared = KeyCombination(key: "space", modifiers: [.control])
+        let shared = KeyCombination(key: "space", modifiers: [.control, .option])
         let bindings = [
             HotkeyBinding(action: .toggle, combination: shared),
             HotkeyBinding(action: .cancel, combination: shared),
@@ -187,5 +190,94 @@ struct BindingValidationTests {
         ]
 
         #expect(bindings.problems().count == 1)
+    }
+}
+
+@Suite("Combinations macOS keeps for itself")
+struct ReservedCombinationTests {
+
+    /// This one cannot be found out by trying: registering it succeeds, and then
+    /// nothing happens when it is pressed, because macOS consumed the key first.
+    /// Unsaid, the only symptom is a shortcut that does not work.
+    @Test("the ones the system takes first are named", arguments: [
+        "Ctrl+Space", "Ctrl+Shift+Space", "Cmd+Space", "Cmd+Alt+Space",
+        "Cmd+Tab", "Cmd+Q", "Cmd+C", "Cmd+V",
+    ])
+    func namesReservedCombinations(_ text: String) throws {
+        let combination = try #require(KeyCombination(parsing: text))
+
+        #expect(combination.systemOwner != nil, "\(text) should be flagged")
+    }
+
+    @Test("what Diktaf uses by default is not among them")
+    func defaultsAreNotReserved() {
+        for binding in Settings.defaultBindings {
+            #expect(binding.combination.systemOwner == nil,
+                    "\(binding.combination.displayName) is reserved")
+        }
+        #expect(Settings.defaultBindings.problems().isEmpty)
+    }
+
+    @Test("a reserved key is reported as a problem, not silently accepted")
+    func reportsAsProblem() throws {
+        let ctrlSpace = try #require(KeyCombination(parsing: "Ctrl+Space"))
+        let bindings = [HotkeyBinding(action: .toggle, combination: ctrlSpace)]
+
+        let problems = bindings.problems()
+
+        #expect(problems.count == 1)
+        if case .reservedBySystem(let action, let combination, let owner) = problems[0] {
+            #expect(action == .toggle)
+            #expect(combination == ctrlSpace)
+            #expect(owner.contains("input source"))
+        } else {
+            Issue.record("expected a reservedBySystem problem, got \(problems)")
+        }
+    }
+
+    @Test("an ordinary combination is left alone", arguments: [
+        "Ctrl+Alt+Space", "Ctrl+Alt+D", "Cmd+Shift+Alt+K", "F13",
+    ])
+    func allowsOrdinaryCombinations(_ text: String) throws {
+        #expect(try #require(KeyCombination(parsing: text)).systemOwner == nil)
+    }
+}
+
+@Suite("The two models")
+struct ModelSettingTests {
+
+    /// Cleanup runs on every dictation and wants to be quick; the agent runs when
+    /// asked and wants to be good. One setting could not be both.
+    @Test("cleanup and the agent are chosen separately")
+    func areIndependent() throws {
+        var settings = Settings.defaults
+        settings.cleanupModel = "haiku"
+        settings.agentModel = "opus"
+
+        let decoded = try JSONDecoder().decode(
+            Settings.self, from: try JSONEncoder().encode(settings))
+
+        #expect(decoded.cleanupModel == "haiku")
+        #expect(decoded.agentModel == "opus")
+    }
+
+    @Test("cleanup defaults to the fast one and the agent to no preference")
+    func haveSensibleDefaults() {
+        #expect(Settings.defaults.cleanupModel == "haiku")
+        #expect(Settings.defaults.agentModel == nil)
+    }
+
+    /// A file written before the two were told apart had only `agentModel`, and
+    /// must not lose the rest of its settings over it.
+    @Test("a file from before the split still loads")
+    func loadsOlderFiles() throws {
+        let old = Data(#"{"agentModel":"sonnet","cleanupEnabled":false}"#.utf8)
+
+        let decoded = try JSONDecoder().decode(Settings.self, from: old)
+
+        #expect(decoded.agentModel == "sonnet")
+        #expect(decoded.cleanupModel == "haiku", "the new key takes its default")
+        #expect(decoded.cleanupEnabled == false)
+        #expect(decoded.bindings == Settings.defaults.bindings)
     }
 }

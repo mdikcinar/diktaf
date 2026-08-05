@@ -65,14 +65,18 @@ final class AppModel {
         self.permissionAuthority = MacPermissions()
         self.hotkeys = MacHotkeyMonitor()
 
-        let runner = ClaudeAgentRunner(model: initial.agentModel)
+        // Both models are read from the settings at the moment they are used
+        // rather than captured here. These two objects live for as long as the
+        // application does, so a value read now is the value from before the user
+        // changed it — which is indistinguishable from the setting doing nothing.
+        let runner = ClaudeAgentRunner(model: { await service.settings.agentModel })
         self.agentRunner = runner
         self.conversation = AgentConversation(runner: runner)
 
         self.session = DictationSession(
             transcriber: transcriber,
             refiner: ClaudeRefiner(
-                model: initial.agentModel ?? "haiku",
+                model: { await service.settings.cleanupModel },
                 timeoutSeconds: initial.refinerTimeoutSeconds),
             clipboard: PasteboardClipboard(),
             keyboard: CGEventKeyboard(),
