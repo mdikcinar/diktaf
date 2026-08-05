@@ -19,6 +19,7 @@ import Speech
 public actor SystemTranscriber: Transcriber {
     private var requestedLocale: Locale?
     private let catalogue: SpeechModelCatalogue
+    private let permissions: any PermissionAuthority
 
     private var engine: AVAudioEngine?
     private var analyzer: SpeechAnalyzer?
@@ -36,9 +37,14 @@ public actor SystemTranscriber: Transcriber {
     private var abandoned = false
 
     /// - Parameter locale: nil follows whatever the system is set to.
-    public init(locale: Locale? = nil, catalogue: SpeechModelCatalogue = SpeechModelCatalogue()) {
+    public init(
+        locale: Locale? = nil,
+        catalogue: SpeechModelCatalogue = SpeechModelCatalogue(),
+        permissions: any PermissionAuthority = MacPermissions()
+    ) {
         self.requestedLocale = locale
         self.catalogue = catalogue
+        self.permissions = permissions
     }
 
     /// Changes the language for the next dictation.
@@ -56,6 +62,8 @@ public actor SystemTranscriber: Transcriber {
         settled = ""
         volatileTail = ""
         abandoned = false
+
+        try await ensureMicrophone()
 
         let wanted = requestedLocale ?? Locale.current
         guard let locale = await catalogue.resolve(wanted) else {
@@ -117,6 +125,34 @@ public actor SystemTranscriber: Transcriber {
         Task { [catalogue] in await catalogue.reserve(locale) }
 
         return stream
+    }
+
+    /// Gets the microphone permission settled before any audio API is touched.
+    ///
+    /// Not a nicety, and not something the caller can be left to remember:
+    /// reaching for `AVAudioEngine`'s input node without it **blocks and never
+    /// returns**. It does not fail, it does not throw, and nothing is logged —
+    /// the dictation simply never starts, which is indistinguishable from the
+    /// hotkey never having arrived. That cost an afternoon to find, so the check
+    /// lives here, in front of the only code that could hit it.
+    ///
+    /// `request` is the API that puts the system's prompt up and comes back with
+    /// an answer, which is why asking is not the same as blocking.
+    private func ensureMicrophone() async throws {
+        var state = await permissions.state(of: .microphone)
+        if state == .undetermined {
+            state = await permissions.request(.microphone)
+        }
+        guard state == .granted else {
+            throw TranscriptionFailure.notPermitted(.microphone)
+        }
+
+        // Asked for but never insisted on. The dictation model runs on this Mac,
+        // and whether it consults this authorisation at all is not documented —
+        // so refusing to transcribe over it would be inventing a requirement.
+        if await permissions.state(of: .speechRecognition) == .undetermined {
+            await permissions.request(.speechRecognition)
+        }
     }
 
     private func startEngine(

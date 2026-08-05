@@ -11,7 +11,10 @@ extension KeyCombination {
     public init?(parsing text: String) {
         let tokens = text
             .split(whereSeparator: { $0 == "+" || $0 == "-" })
-            .map { String($0).trimmed.lowercased() }
+            // Spaces removed inside a token as well as around it, so that the
+            // names with one in them — "Mouse 4", "Middle Click" — survive being
+            // written out and read back.
+            .map { String($0).trimmed.lowercased().replacing(" ", with: "") }
             .filter { !$0.isEmpty }
         guard !tokens.isEmpty else { return nil }
 
@@ -24,7 +27,7 @@ extension KeyCombination {
                 // is accepted rather than rejected.
                 modifiers.insert(modifier)
             } else if key == nil {
-                key = token
+                key = Self.canonicalKeyName(token)
             } else {
                 // Two ordinary keys is not a combination anybody can press.
                 return nil
@@ -41,7 +44,24 @@ extension KeyCombination {
     /// The order is the order the modifiers are written in on macOS, not the
     /// order they were typed in.
     public var displayName: String {
-        (modifiers.canonicalNames + [key.capitalizedKeyName]).joined(separator: "+")
+        (modifiers.canonicalNames + [readableKey]).joined(separator: "+")
+    }
+
+    /// The name a mouse button is stored under, whatever it was written as.
+    private static func canonicalKeyName(_ token: String) -> String {
+        switch token {
+        case "middleclick", "middlebutton", "mousemiddle": "mouse3"
+        default: token
+        }
+    }
+
+    private var readableKey: String {
+        if let button = mouseButton {
+            // Named where it has a name. "Mouse 3" is the middle one on every
+            // mouse there is, and calling it that is friendlier than a number.
+            return button == 3 ? "Middle Click" : "Mouse \(button)"
+        }
+        return key.capitalizedKeyName
     }
 }
 

@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import DiktafCore
 
@@ -59,6 +60,86 @@ struct KeyCombinationTests {
     func acceptsBareKey() {
         #expect(KeyCombination(parsing: "f13")
                 == KeyCombination(key: "f13", modifiers: []))
+    }
+}
+
+@Suite("Mouse buttons as shortcuts")
+struct MouseButtonTests {
+
+    @Test("a spare button is a combination like any other")
+    func makesAMouseCombination() {
+        let combination = KeyCombination.mouseButton(4, modifiers: [.control])
+
+        #expect(combination.mouseButton == 4)
+        #expect(combination.isMouseButton)
+        #expect(combination.displayName == "Ctrl+Mouse 4")
+    }
+
+    /// Binding the left or right button would leave the user unable to click
+    /// anything, so those numbers are not mouse buttons as far as this is
+    /// concerned.
+    @Test("the left and right buttons are not offered", arguments: [1, 2])
+    func refusesTheClickingButtons(_ number: Int) {
+        #expect(KeyCombination.mouseButton(number).mouseButton == nil)
+        #expect(!KeyCombination.mouseButton(number).isMouseButton)
+    }
+
+    @Test("the middle one is called what people call it")
+    func namesTheMiddleButton() {
+        #expect(KeyCombination.mouseButton(3).displayName == "Middle Click")
+        #expect(KeyCombination(parsing: "Middle Click") == KeyCombination.mouseButton(3))
+        #expect(KeyCombination(parsing: "mouse3") == KeyCombination.mouseButton(3))
+    }
+
+    /// The names have spaces in them, so the round trip is where this breaks if
+    /// the parser is careless.
+    @Test("printing one and reading it back gives the same button", arguments: [
+        KeyCombination.mouseButton(3),
+        KeyCombination.mouseButton(4, modifiers: [.control, .option]),
+        KeyCombination.mouseButton(9, modifiers: [.command]),
+    ])
+    func roundTripsThroughText(_ original: KeyCombination) {
+        #expect(KeyCombination(parsing: original.displayName) == original)
+    }
+
+    @Test("a key is not a mouse button")
+    func distinguishesKeys() {
+        #expect(KeyCombination(key: "space", modifiers: []).mouseButton == nil)
+        #expect(KeyCombination(key: "mouse", modifiers: []).mouseButton == nil)
+        #expect(KeyCombination(key: "mousex", modifiers: []).mouseButton == nil)
+    }
+
+    /// There is no application that needs the fourth mouse button the way every
+    /// application needs the letter D, so a bare one is fine.
+    @Test("a bare mouse button is not the mistake a bare key would be")
+    func allowsBareMouseButtons() {
+        let mouse = [HotkeyBinding(action: .toggle, combination: .mouseButton(4))]
+        let key = [HotkeyBinding(action: .toggle,
+                                 combination: KeyCombination(key: "d", modifiers: []))]
+
+        #expect(mouse.problems().isEmpty)
+        #expect(!key.problems().isEmpty)
+    }
+
+    @Test("two actions on one button is still caught")
+    func catchesDuplicateButtons() {
+        let bindings = [
+            HotkeyBinding(action: .toggle, combination: .mouseButton(4)),
+            HotkeyBinding(action: .cancel, combination: .mouseButton(4)),
+        ]
+
+        #expect(bindings.problems().count == 1)
+    }
+
+    @Test("it survives being written to the settings file")
+    func roundTripsThroughJSON() throws {
+        var settings = Settings.defaults
+        settings.bindings = [HotkeyBinding(action: .toggle, combination: .mouseButton(5))]
+
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(Settings.self, from: data)
+
+        #expect(decoded.combination(for: .toggle)?.mouseButton == 5)
     }
 }
 

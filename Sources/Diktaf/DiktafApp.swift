@@ -1,39 +1,48 @@
+import AppKit
 import DiktafCore
 import SwiftUI
 
 @main
 struct DiktafApp: App {
-    @State private var model = AppModel()
-
-    /// Held here rather than in a scene: the indicator is an AppKit panel because
-    /// no SwiftUI window can be shown without disturbing the keyboard, and the
-    /// panel has to outlive any one view's lifetime.
-    @State private var overlay = OverlayController()
+    /// The model belongs to the delegate rather than to a `@State` here, and this
+    /// is not a matter of taste. Reading a `@State` from an `App`'s `init` hands
+    /// back an instance SwiftUI then throws away, so the wiring done to it —
+    /// registering the global keys — was done to an object that was deallocated a
+    /// moment later. The keys fired, the handler ran, and its `weak self` was nil:
+    /// a dictation key that did nothing at all, with nothing logged to say why.
+    ///
+    /// A delegate also gives the one moment worth doing this at, which is after
+    /// the application has finished launching.
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarContent(model: model)
+            MenuBarContent(model: delegate.model)
         } label: {
-            Image(systemName: model.menuBarSymbol)
-                .accessibilityLabel(model.menuBarDescription)
+            Image(systemName: delegate.model.menuBarSymbol)
+                .accessibilityLabel(delegate.model.menuBarDescription)
         }
         .menuBarExtraStyle(.menu)
 
         Settings {
-            SettingsWindow(model: model)
-                .frame(width: 620, height: 460)
+            SettingsWindow(model: delegate.model)
+                .frame(width: 640, height: 470)
         }
 
         Window("Agent", id: "agent") {
-            AgentWindow(model: model)
+            AgentWindow(model: delegate.model)
                 .frame(minWidth: 460, minHeight: 320)
         }
         .defaultLaunchBehavior(.suppressed)
     }
+}
 
-    init() {
-        let model = self.model
-        let overlay = self.overlay
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    let model = AppModel()
+    private let overlay = OverlayController()
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
         Task { @MainActor in
             await model.start()
             overlay.follow(model)

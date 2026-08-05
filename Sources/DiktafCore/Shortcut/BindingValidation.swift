@@ -31,7 +31,12 @@ extension Array where Element == HotkeyBinding {
             if !problems.contains(problem) { problems.append(problem) }
         }
 
-        for binding in self where binding.combination.modifiers.isEmpty {
+        // A mouse button is exempt. Binding a spare button with no modifier is
+        // the normal way to use one, and it takes nothing away: there is no
+        // application that needs the fourth button the way every application
+        // needs the letter D.
+        for binding in self
+        where binding.combination.modifiers.isEmpty && !binding.combination.isMouseButton {
             problems.append(.noModifiers(binding.action, binding.combination))
         }
 

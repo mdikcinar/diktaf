@@ -63,7 +63,7 @@ final class AppModel {
         let transcriber = SystemTranscriber(locale: initial.language.map(Locale.init(identifier:)))
         self.transcriber = transcriber
         self.permissionAuthority = MacPermissions()
-        self.hotkeys = CarbonHotkeyMonitor()
+        self.hotkeys = MacHotkeyMonitor()
 
         let runner = ClaudeAgentRunner(model: initial.agentModel)
         self.agentRunner = runner
@@ -89,7 +89,16 @@ final class AppModel {
         await transcriber.use(locale: settings.language.map(Locale.init(identifier:)))
 
         registerShortcuts()
+
+        // Not awaited. The prompt is a dialogue somebody has to answer, and
+        // everything below — watching the session, reading the language list —
+        // would otherwise sit behind it for as long as it stayed on screen.
+        Task { await askForWhatHasNotBeenAsked() }
+
         await refreshPermissions()
+        Diagnostics.event("permissions: " + PermissionKind.allCases
+            .map { "\($0.rawValue)=\(permissions[$0]?.rawValue ?? "?")" }
+            .joined(separator: " "))
         await refreshAgentAvailability()
         await refreshLocales()
 
@@ -123,10 +132,14 @@ final class AppModel {
         for await event in await session.events() {
             switch event {
             case .state(let newState):
+                Diagnostics.state(String(describing: newState))
+                if case .failed(let message) = newState { Diagnostics.failure(message) }
                 state = newState
             case .notice(let message):
+                Diagnostics.event("notice: \(message)")
                 notice = message
             case .agentPrompt(let prompt):
+                Diagnostics.event("agent asked: \(prompt.count) characters")
                 await ask(prompt)
             }
         }
@@ -197,16 +210,26 @@ final class AppModel {
             binding.action != .agent || settings.agentEnabled
         }
         refusedShortcuts = hotkeys.rebind(wanted) { [weak self] action in
-            // Carbon calls this on the main thread, but the port promises
-            // nothing, so the hop is explicit.
-            Task { @MainActor [weak self] in
-                guard let self else { return }
+            // The monitor promises nothing about which thread this arrives on.
+            Task { @MainActor in
+                guard let model = self else {
+                    // Only reachable if the model outlives its owner, which is
+                    // what a `@State` read in `App.init` used to cause: the keys
+                    // fired into an object that had already gone.
+                    Diagnostics.failure("hotkey \(action) arrived with no model")
+                    return
+                }
+                Diagnostics.event("hotkey: \(action)")
                 switch action {
-                case .toggle: self.toggle()
-                case .cancel: self.cancel()
-                case .agent: self.askAgent()
+                case .toggle: model.toggle()
+                case .cancel: model.cancel()
+                case .agent: model.askAgent()
                 }
             }
+        }
+        for binding in refusedShortcuts {
+            Diagnostics.failure(
+                "\(binding.combination.displayName) was refused; something else holds it")
         }
     }
 
@@ -220,9 +243,34 @@ final class AppModel {
         permissions = found
     }
 
+    /// Puts the microphone prompt up at startup rather than at the first
+    /// dictation.
+    ///
+    /// The prompt is a dialogue somebody has to answer, and answering it takes
+    /// as long as it takes. Asked at the moment the key is pressed, the dictation
+    /// sits there waiting on it and looks broken — which is the same thing the
+    /// user would have seen from the bug this replaced. Asked at launch, the
+    /// question arrives when nothing is waiting on the answer.
+    ///
+    /// Only what has never been asked: a permission already refused is not asked
+    /// again, because macOS would not show the prompt anyway.
+    private func askForWhatHasNotBeenAsked() async {
+        for kind in [PermissionKind.microphone, .speechRecognition] {
+            if await permissionAuthority.state(of: kind) == .undetermined {
+                Diagnostics.event("asking for \(kind.rawValue)")
+                await permissionAuthority.request(kind)
+                Diagnostics.event(
+                    "\(kind.rawValue) answered: "
+                    + (await permissionAuthority.state(of: kind)).rawValue)
+            }
+        }
+        await refreshPermissions()
+    }
+
     func request(_ kind: PermissionKind) async {
         await permissionAuthority.request(kind)
         await refreshPermissions()
+        Diagnostics.event("permission \(kind.rawValue) is now \(permissions[kind]?.rawValue ?? "?")")
     }
 
     func openSettings(for kind: PermissionKind) {

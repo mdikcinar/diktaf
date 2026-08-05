@@ -190,7 +190,6 @@ private struct CleanupTab: View {
             }
         }
         .formStyle(.grouped)
-        .disabled(!model.settings.cleanupEnabled && false)
     }
 
     private var enabledBinding: Binding<Bool> {
@@ -261,21 +260,39 @@ private struct ShortcutsTab: View {
             Section {
                 ForEach(HotkeyAction.allCases, id: \.self) { action in
                     LabeledContent(action.label) {
-                        ShortcutField(model: model, action: action)
+                        ShortcutRecorder(
+                            combination: model.settings.combination(for: action)
+                        ) { chosen in
+                            model.update { settings in
+                                settings.bindings.removeAll { $0.action == action }
+                                if let chosen {
+                                    settings.bindings.append(
+                                        HotkeyBinding(action: action, combination: chosen))
+                                }
+                            }
+                        }
                     }
                 }
             } footer: {
-                Text("""
-                Ctrl+Space is not offered: macOS gives it to the input source \
-                switcher, so a shortcut registered there never arrives.
-                """)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Click a shortcut, then press the keys you want. "
+                         + "A spare mouse button works too — the middle one, or "
+                         + "any button past it.")
+                    Text("Esc keeps what was there, Delete clears it. The left and "
+                         + "right mouse buttons are not offered: bound to one of "
+                         + "those, you could not click anything again.")
+                    Text("Ctrl+Space will not work either. macOS gives it to the "
+                         + "input source switcher, so a shortcut registered there "
+                         + "never arrives.")
+                }
                 .font(.caption)
             }
 
-            if !model.settings.bindings.problems().isEmpty {
+            let problems = model.settings.bindings.problems()
+            if !problems.isEmpty {
                 Section("Problems") {
-                    ForEach(model.settings.bindings.problems().indices, id: \.self) { index in
-                        Label(model.settings.bindings.problems()[index].message,
+                    ForEach(problems.indices, id: \.self) { index in
+                        Label(problems[index].message,
                               systemImage: "exclamationmark.triangle")
                     }
                 }
@@ -293,45 +310,6 @@ private struct ShortcutsTab: View {
             }
         }
         .formStyle(.grouped)
-    }
-}
-
-/// Typed rather than recorded by watching for a key press.
-///
-/// A recorder would have to take over the keyboard to catch the combination, and
-/// the combinations worth binding are the ones another application would rather
-/// have. Typing "Ctrl+Alt+Space" always works.
-private struct ShortcutField: View {
-    let model: AppModel
-    let action: HotkeyAction
-
-    @State private var text = ""
-    @State private var isValid = true
-
-    var body: some View {
-        TextField("Ctrl+Alt+Space", text: $text)
-            .frame(width: 180)
-            .foregroundStyle(isValid ? Color.primary : Color.red)
-            .onSubmit(commit)
-            .onAppear {
-                text = model.settings.combination(for: action)?.displayName ?? ""
-            }
-            .onChange(of: text) { _, new in
-                isValid = new.isEmpty || KeyCombination(parsing: new) != nil
-            }
-    }
-
-    private func commit() {
-        guard let combination = KeyCombination(parsing: text) else {
-            isValid = false
-            return
-        }
-        isValid = true
-        text = combination.displayName
-        model.update { settings in
-            settings.bindings.removeAll { $0.action == action }
-            settings.bindings.append(HotkeyBinding(action: action, combination: combination))
-        }
     }
 }
 

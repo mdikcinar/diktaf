@@ -10,21 +10,21 @@ import DiktafCore
 /// produces a shortcut that registers without complaint and never fires, or a
 /// key press that arrives with the wrong modifiers held — both of which look
 /// like the application ignoring you.
-enum KeyCodes {
+public enum KeyCodes {
 
     /// Virtual key codes, which are the same for both APIs.
     ///
     /// Only the keys worth binding a global shortcut to. Letters and digits are
     /// derived; everything else is named, because a user writing "space" in the
     /// settings should not have to know it is 49.
-    static func virtualKey(for name: String) -> CGKeyCode? {
+    public static func virtualKey(for name: String) -> CGKeyCode? {
         if let named = named[name] { return named }
         // A single letter or digit, looked up in the same table by its own name.
         if name.count == 1, let single = named[name] { return single }
         return nil
     }
 
-    private static let named: [String: CGKeyCode] = {
+    static let named: [String: CGKeyCode] = {
         var table: [String: CGKeyCode] = [
             "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7,
             "c": 8, "v": 9, "b": 11, "q": 12, "w": 13, "e": 14, "r": 15,
@@ -57,7 +57,7 @@ enum KeyCodes {
     }()
 
     /// What `RegisterEventHotKey` takes.
-    static func carbonModifiers(_ modifiers: KeyCombination.Modifiers) -> UInt32 {
+    public static func carbonModifiers(_ modifiers: KeyCombination.Modifiers) -> UInt32 {
         var flags: Int = 0
         if modifiers.contains(.command) { flags |= cmdKey }
         if modifiers.contains(.option)  { flags |= optionKey }
@@ -67,7 +67,7 @@ enum KeyCodes {
     }
 
     /// What a posted `CGEvent` carries. Deliberately not the numbers above.
-    static func eventFlags(_ modifiers: KeyCombination.Modifiers) -> CGEventFlags {
+    public static func eventFlags(_ modifiers: KeyCombination.Modifiers) -> CGEventFlags {
         var flags: CGEventFlags = []
         if modifiers.contains(.command) { flags.insert(.maskCommand) }
         if modifiers.contains(.option)  { flags.insert(.maskAlternate) }
@@ -75,4 +75,29 @@ enum KeyCodes {
         if modifiers.contains(.shift)   { flags.insert(.maskShift) }
         return flags
     }
+}
+
+extension KeyCodes {
+    /// The name to store for a key that was just pressed.
+    ///
+    /// The reverse of `virtualKey(for:)`, and derived from the same table so the
+    /// two cannot drift apart. Built from a key code rather than from the
+    /// characters the event carries, because the characters depend on the
+    /// keyboard layout and on which modifiers were held — Alt+D on a Turkish
+    /// layout does not produce "d", and a shortcut recorded from the character
+    /// would only work on the layout it was recorded on.
+    public static func portableName(forVirtualKey code: UInt16) -> String? {
+        byCode[CGKeyCode(code)]
+    }
+
+    private static let byCode: [CGKeyCode: String] = {
+        var table: [CGKeyCode: String] = [:]
+        for (name, code) in named {
+            // The first spelling wins, so "space" is not overwritten by a
+            // synonym and "return" does not become "enter".
+            if let existing = table[code], existing.count <= name.count { continue }
+            table[code] = name
+        }
+        return table
+    }()
 }
