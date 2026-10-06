@@ -47,11 +47,24 @@ struct SystemProcessRunner: ProcessRunner {
     /// HOME is not optional. It is where the CLI keeps the credentials of the
     /// signed-in user, and without it every run fails as though nobody had ever
     /// logged in.
-    private static func childEnvironment() -> [String: String] {
-        let parent = ProcessInfo.processInfo.environment
-        var environment: [String: String] = [
-            "PATH": parent["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin",
-        ]
+    ///
+    /// PATH leads with the command's own directory: an npm-installed `claude` is
+    /// `#!/usr/bin/env node` with node beside it, and under launchd's PATH `env`
+    /// finds none and exits 127. Then every directory `ClaudeExecutable` searched.
+    static func childEnvironment(
+        for executable: URL,
+        parent: [String: String] = ProcessInfo.processInfo.environment
+    ) -> [String: String] {
+        var searched = parent
+        searched["PATH"] = parent["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        let ownDirectory = (executable.path(percentEncoded: false) as NSString)
+            .deletingLastPathComponent
+
+        var seen = Set<String>()
+        let path = ([ownDirectory] + ClaudeExecutable.searchPath(environment: searched))
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+
+        var environment = ["PATH": path.joined(separator: ":")]
         for key in ["HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "SHELL"] {
             if let value = parent[key] { environment[key] = value }
         }
@@ -64,15 +77,22 @@ struct SystemProcessRunner: ProcessRunner {
         standardInput: String,
         timeout: Duration
     ) async throws -> ProcessOutcome {
+        try Task.checkCancellation()
+
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
-        process.environment = Self.childEnvironment()
+        process.environment = Self.childEnvironment(for: executable)
 
         let input = Pipe(), output = Pipe(), errors = Pipe()
         process.standardInput = input
         process.standardOutput = output
         process.standardError = errors
+
+        // Set before the launch: a program that fails at once can be gone
+        // before a handler set afterwards exists, and then nobody is told.
+        let termination = Termination()
+        process.terminationHandler = { _ in termination.signal() }
 
         do {
             try process.run()
@@ -80,19 +100,14 @@ struct SystemProcessRunner: ProcessRunner {
             throw ProcessRunnerFailure.couldNotStart(String(describing: error))
         }
 
-        // Both pipes are drained on tasks of their own, and neither wait for the
+        // Both pipes are drained as the data arrives, and neither waits for the
         // process. A program that fills one pipe's buffer while nobody is reading
         // it blocks forever, and waiting for it to exit first is exactly how that
         // deadlock is written.
-        let outputTask = Task.detached { output.fileHandleForReading.readDataToEndOfFile() }
-        let errorTask = Task.detached { errors.fileHandleForReading.readDataToEndOfFile() }
+        let standardOutput = PipeDrain(output.fileHandleForReading)
+        let standardError = PipeDrain(errors.fileHandleForReading)
 
-        if let data = standardInput.data(using: .utf8), !data.isEmpty {
-            try? input.fileHandleForWriting.write(contentsOf: data)
-        }
-        // The prompt arrives on stdin, so the CLI waits for end-of-file before it
-        // does anything at all. Closing is what starts the work.
-        try? input.fileHandleForWriting.close()
+        Self.write(standardInput, to: input.fileHandleForWriting)
 
         // Recorded by whoever does the killing, rather than inferred afterwards
         // from the termination reason: a program can be killed by a signal for
@@ -103,30 +118,59 @@ struct SystemProcessRunner: ProcessRunner {
             try await Task.sleep(for: timeout)
             guard process.isRunning else { return }
             killedForTakingTooLong.set()
-            process.terminate()
-            // A CLI that spawns its own children can ignore SIGTERM for longer
-            // than matters, and the deadline has already passed.
-            try? await Task.sleep(for: .milliseconds(500))
-            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+            Self.stop(process)
         }
         defer { killer.cancel() }
 
-        // waitUntilExit blocks its thread, so it gets one of its own. The pipes
-        // are already being drained, which is what keeps this from deadlocking.
-        await Task.detached { process.waitUntilExit() }.value
+        // The wait itself ignores cancellation on purpose: a cancelled caller
+        // stops the program and then waits for it to be gone, so that nothing it
+        // started outlives the dictation it belonged to.
+        await withTaskCancellationHandler {
+            await termination.wait()
+        } onCancel: {
+            Self.stop(process)
+        }
 
-        let standardOutput = String(decoding: await outputTask.value)
-        let standardError = String(decoding: await errorTask.value)
+        async let outputData = standardOutput.contents()
+        async let errorData = standardError.contents()
+        let outcome = ProcessOutcome(
+            exitCode: process.terminationStatus,
+            standardOutput: String(decoding: await outputData),
+            standardError: String(decoding: await errorData)
+        )
 
+        try Task.checkCancellation()
         if killedForTakingTooLong.isSet {
             throw ProcessRunnerFailure.timedOut(seconds: timeout.wholeSeconds)
         }
+        return outcome
+    }
 
-        return ProcessOutcome(
-            exitCode: process.terminationStatus,
-            standardOutput: standardOutput,
-            standardError: standardError
-        )
+    /// The prompt arrives on stdin, so the CLI waits for end-of-file before it
+    /// does anything at all. Closing is what starts the work. On a thread that
+    /// may block, because a pipe holds only so much until the other side reads.
+    private static func write(_ text: String, to handle: FileHandle) {
+        // A program that has already exited — the npm CLI that cannot find node
+        // exits at once — turns this write into SIGPIPE, which by default
+        // terminates Diktaf rather than failing the write.
+        _ = fcntl(handle.fileDescriptor, F_SETNOSIGPIPE, 1)
+        DispatchQueue.global(qos: .userInitiated).async {
+            let data = Data(text.utf8)
+            if !data.isEmpty { try? handle.write(contentsOf: data) }
+            try? handle.close()
+        }
+    }
+
+    /// SIGTERM, and SIGKILL half a second later for whatever is still there. A
+    /// CLI that spawns its own children can ignore SIGTERM for longer than
+    /// matters, and whoever asked for the stop is no longer waiting for output.
+    private static func stop(_ process: Process) {
+        guard process.isRunning else { return }
+        process.terminate()
+        let pid = process.processIdentifier
+        DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(500)) {
+            if process.isRunning { kill(pid, SIGKILL) }
+        }
     }
 }
 
@@ -136,6 +180,85 @@ private final class Flag: Sendable {
 
     func set() { value.withLock { $0 = true } }
     var isSet: Bool { value.withLock { $0 } }
+}
+
+/// The moment a process ended, waited for without holding a thread.
+private final class Termination: Sendable {
+    private let state = Mutex<(ended: Bool, waiter: CheckedContinuation<Void, Never>?)>(
+        (false, nil))
+
+    func signal() {
+        let waiter = state.withLock { state in
+            state.ended = true
+            defer { state.waiter = nil }
+            return state.waiter
+        }
+        waiter?.resume()
+    }
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            let ended = state.withLock { state in
+                if !state.ended { state.waiter = continuation }
+                return state.ended
+            }
+            if ended { continuation.resume() }
+        }
+    }
+}
+
+/// Everything a pipe delivers, collected as it arrives rather than by a blocking
+/// read: end-of-file waits for every holder of the other end, grandchildren
+/// included, so once the program has exited `contents` waits only briefly.
+private final class PipeDrain: Sendable {
+    private struct State {
+        var data = Data()
+        var ended = false
+        var waiter: CheckedContinuation<Data, Never>?
+    }
+
+    private let handle: FileHandle
+    private let state = Mutex(State())
+
+    init(_ handle: FileHandle) {
+        self.handle = handle
+        handle.readabilityHandler = { [weak self] handle in
+            let chunk = handle.availableData
+            if chunk.isEmpty {
+                self?.end()
+            } else {
+                self?.state.withLock { $0.data.append(chunk) }
+            }
+        }
+    }
+
+    /// What arrived, once end-of-file does or `grace` has passed without it.
+    func contents(grace: Duration = .seconds(1)) async -> Data {
+        let timer = Task { [weak self] in
+            guard (try? await Task.sleep(for: grace)) != nil else { return }
+            self?.end()
+        }
+        defer { timer.cancel() }
+
+        return await withCheckedContinuation { continuation in
+            let ready: Data? = state.withLock { state in
+                if state.ended { return state.data }
+                state.waiter = continuation
+                return nil
+            }
+            if let ready { continuation.resume(returning: ready) }
+        }
+    }
+
+    private func end() {
+        handle.readabilityHandler = nil
+        let (waiter, data) = state.withLock { state in
+            state.ended = true
+            defer { state.waiter = nil }
+            return (state.waiter, state.data)
+        }
+        waiter?.resume(returning: data)
+    }
 }
 
 extension String {

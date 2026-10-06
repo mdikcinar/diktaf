@@ -12,20 +12,20 @@ import SwiftUI
 struct ModelPicker: View {
     let title: String
     let selection: String?
-    let onChange: (String?) -> Void
+    let onChange: @MainActor @Sendable (String?) -> Void
 
     /// The aliases `claude --model` takes, fastest first. Speed is the axis that
     /// matters here: cleanup happens on every dictation.
     private static let known = [
-        (alias: "haiku", label: "Haiku — fastest, cheapest"),
-        (alias: "sonnet", label: "Sonnet — balanced"),
-        (alias: "opus", label: "Opus — most capable"),
+        (alias: "haiku", label: "Haiku — en hızlı, en ucuz"),
+        (alias: "sonnet", label: "Sonnet — dengeli"),
+        (alias: "opus", label: "Opus — en yetenekli"),
         (alias: "fable", label: "Fable"),
     ]
 
     var body: some View {
         Picker(title, selection: binding) {
-            Text("Whatever claude defaults to").tag(String?.none)
+            Text("claude'un varsayılanı").tag(String?.none)
             ForEach(Self.known, id: \.alias) { model in
                 Text(model.label).tag(String?.some(model.alias))
             }

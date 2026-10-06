@@ -16,7 +16,9 @@ import SwiftUI
 ///   * `.canJoinAllSpaces` and `.fullScreenAuxiliary` so it follows the user
 ///     between desktops and appears beside a full-screen window rather than
 ///     replacing it;
-///   * `ignoresMouseEvents` because it is something to look at, not to click.
+///   * a hosting view that takes the first click, because this application is
+///     never the active one and an ordinary view spends that click activating
+///     the window instead of pressing the button under it.
 ///
 /// None of it prevents the one thing that cannot be prevented: showing any window
 /// at all can take the key window away from whatever the user was typing in.
@@ -33,7 +35,10 @@ final class OverlayController {
             // Observation rather than a stream: this is the interface layer, and
             // redrawing on change is exactly what it is for.
             while !Task.isCancelled {
-                let shouldShow = model.settings.showOverlay && model.state.isBusy
+                // The outcome too, for a moment after the work is done: an
+                // indicator that vanishes as it finishes looks like one that gave up.
+                let shouldShow = model.settings.showOverlay
+                    && (model.state.isBusy || model.isStarting || model.outcome != nil)
                 if shouldShow {
                     show(model)
                 } else {
@@ -42,6 +47,12 @@ final class OverlayController {
                 await withCheckedContinuation { continuation in
                     withObservationTracking {
                         _ = model.state
+                        _ = model.isStarting
+                        _ = model.outcome
+                        _ = model.progress
+                        _ = model.cleanupChoice
+                        _ = model.hearsNothing
+                        _ = model.whisperLoadState
                         _ = model.settings.showOverlay
                     } onChange: {
                         continuation.resume()
@@ -54,6 +65,14 @@ final class OverlayController {
     private func show(_ model: AppModel) {
         let panel = panel ?? makePanel(for: model)
         self.panel = panel
+        // Sized to what it shows, which grows from one line while listening to
+        // a list of steps afterwards.
+        if let content = panel.contentView {
+            let size = content.fittingSize
+            if size != panel.frame.size, size.width > 0, size.height > 0 {
+                panel.setContentSize(size)
+            }
+        }
         position(panel)
         // `orderFrontRegardless` rather than `makeKeyAndOrderFront`: the second
         // would hand this panel the keyboard, which is the one thing an indicator
@@ -67,7 +86,7 @@ final class OverlayController {
 
     private func makePanel(for model: AppModel) -> NSPanel {
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 64),
+            contentRect: NSRect(x: 0, y: 0, width: RecordingIndicator.width, height: 64),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -81,8 +100,7 @@ final class OverlayController {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
-        panel.ignoresMouseEvents = true
-        panel.contentView = NSHostingView(rootView: RecordingIndicator(model: model))
+        panel.contentView = ClickThroughHostingView(rootView: RecordingIndicator(model: model))
         return panel
     }
 
@@ -100,4 +118,8 @@ final class OverlayController {
             y: visible.minY + 96
         ))
     }
+}
+
+private final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }

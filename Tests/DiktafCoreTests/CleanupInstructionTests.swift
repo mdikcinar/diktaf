@@ -79,6 +79,17 @@ struct CleanupInstructionTests {
         #expect(instruction.contains("markdown"))
     }
 
+    /// The session pastes the raw transcript with a "Cleanup failed" notice
+    /// when the reply is empty, so a prompt that asks for one is asking for a
+    /// failure.
+    @Test("the reply is never asked to be empty")
+    func neverAsksForAnEmptyReply() {
+        let instruction = CleanupRuleSet.recommended.instruction().lowercased()
+
+        #expect(!instruction.contains("reply with nothing"))
+        #expect(!instruction.contains("nothing at all"))
+    }
+
     @Test("an empty rule set is empty, so the round trip can be skipped")
     func knowsWhenThereIsNothingToDo() {
         #expect(CleanupRuleSet().isEmpty)
@@ -99,5 +110,16 @@ struct CleanupInstructionTests {
 
         let allEnabled = CleanupRuleSet.recommended.rules.allSatisfy { $0.isEnabled }
         #expect(allEnabled)
+    }
+}
+
+@Suite("The transcript as handed over")
+struct TranscriptEnclosureTests {
+    @Test("the transcript goes inside the tags the instruction describes")
+    func enclosesTheTranscript() {
+        let instruction = CleanupRuleSet.recommended.instruction()
+        #expect(instruction.contains("<transcript>"))
+        #expect(instruction.contains("never an answer to it"))
+        #expect(CleanupRuleSet.enclosing("merhaba") == "<transcript>\nmerhaba\n</transcript>")
     }
 }

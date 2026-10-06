@@ -32,19 +32,19 @@ extension KeyCombination {
     public var systemOwner: String? {
         switch (key, modifiers) {
         case ("space", [.control]), ("space", [.control, .shift]):
-            "switching input source"
+            "giriş kaynağını değiştirme"
         case ("space", [.command]):
             "Spotlight"
         case ("space", [.command, .option]):
-            "Finder search"
+            "Finder araması"
         case ("tab", [.command]), ("tab", [.command, .shift]):
-            "switching application"
+            "uygulamalar arasında geçiş"
         case ("q", [.command]), ("w", [.command]), ("h", [.command]),
              ("m", [.command]), ("c", [.command]), ("v", [.command]),
              ("x", [.command]), ("z", [.command]), ("a", [.command]):
-            "an editing or window command every application has"
+            "her uygulamadaki düzenleme ve pencere komutları"
         case ("escape", [.command, .option]):
-            "Force Quit"
+            "Çıkmaya Zorla"
         default:
             nil
         }

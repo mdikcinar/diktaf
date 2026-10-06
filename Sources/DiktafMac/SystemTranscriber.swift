@@ -2,6 +2,7 @@ import AVFoundation
 import DiktafCore
 import Foundation
 import Speech
+import Synchronization
 
 /// Speech to text with the recogniser built into macOS.
 ///
@@ -28,13 +29,17 @@ public actor SystemTranscriber: Transcriber {
     private var updates: AsyncThrowingStream<TranscriptUpdate, any Error>.Continuation?
     private var resultsTask: Task<Void, Never>?
 
+    /// What the tap measures for the level meter. Nil when not recording.
+    private var meter: InputMeter?
+
     /// Text the recogniser has committed to, and the tail it has not.
     private var settled = ""
     private var volatileTail = ""
 
-    /// Set by `cancel()`, so a result still in flight is not yielded after the
-    /// caller has said it no longer wants any.
-    private var abandoned = false
+    /// Counted up by `start()` and `cancel()`. Results, finalising and teardown
+    /// all come after an await and compare it first, so a late stop cannot close
+    /// the next dictation's stream or take its analyzer away.
+    private var dictation = 0
 
     /// - Parameter locale: nil follows whatever the system is set to.
     public init(
@@ -56,12 +61,37 @@ public actor SystemTranscriber: Transcriber {
         requestedLocale = locale
     }
 
+    // MARK: - What the indicator shows
+
+    /// How loud the microphone is, from 0 for a quiet room to 1 for a raised
+    /// voice, and 0 when nothing is being recorded. Smoothed, so that a meter
+    /// drawn from it falls back rather than flickering.
+    public func inputLevel() -> Float {
+        meter?.level ?? 0
+    }
+
+    /// How much has been recorded so far in this dictation, and 0 when nothing
+    /// is being recorded.
+    public func recordedSeconds() -> Double {
+        meter?.seconds ?? 0
+    }
+
     // MARK: - Starting
 
     public func start() async throws -> AsyncThrowingStream<TranscriptUpdate, any Error> {
+        // One recording at a time: a second engine on the same input would be
+        // left running by the first one's stop.
+        guard engine?.isRunning != true else {
+            throw TranscriptionFailure.underlying("Zaten süren bir dikte var.")
+        }
+        dictation += 1
+        let ours = dictation
+
+        // A stream an earlier dictation left open is closed rather than left
+        // for this one to share.
+        finish(throwing: nil)
         settled = ""
         volatileTail = ""
-        abandoned = false
 
         try await ensureMicrophone()
 
@@ -84,13 +114,17 @@ public actor SystemTranscriber: Transcriber {
         // The progressive preset is what asks for the volatile tail. Without it
         // nothing arrives until a phrase is finished.
         let transcriber = SpeechModelCatalogue.module(for: locale)
-        self.transcriber = transcriber
 
         guard let analyzerFormat = await SpeechAnalyzer
             .bestAvailableAudioFormat(compatibleWith: [transcriber]) else {
             throw TranscriptionFailure.audioUnavailable(
-                "the recogniser named no audio format it can read")
+                "tanıyıcı okuyabileceği bir ses biçimi bildirmedi")
         }
+
+        // Everything so far only asked questions. From here on this dictation
+        // holds things, so it has to still be the current one.
+        guard dictation == ours else { throw CancellationError() }
+        self.transcriber = transcriber
 
         let (inputStream, inputContinuation) = AsyncStream.makeStream(of: AnalyzerInput.self)
         self.inputContinuation = inputContinuation
@@ -105,18 +139,31 @@ public actor SystemTranscriber: Transcriber {
         // Started before the audio, so that no buffer is produced with nowhere
         // to go.
         resultsTask = Task { [weak self] in
-            await self?.consume(transcriber.results)
+            await self?.consume(transcriber.results, of: ours)
         }
 
         do {
             try await analyzer.start(inputSequence: inputStream)
+            guard dictation == ours else { throw CancellationError() }
             try startEngine(feeding: inputContinuation, converting: analyzerFormat)
-        } catch let failure as TranscriptionFailure {
-            await tearDown()
-            throw failure
         } catch {
-            await tearDown()
-            throw TranscriptionFailure.underlying(String(describing: error))
+            // Nothing of a start that failed may outlive it: not the analyzer,
+            // not the task waiting on its results, and not a stream nobody will
+            // ever finish.
+            inputContinuation.finish()
+            if dictation == ours {
+                stopAudio()
+                self.inputContinuation = nil
+                resultsTask?.cancel()
+                finish(throwing: nil)
+                tearDown()
+            }
+            await analyzer.cancelAndFinishNow()
+            switch error {
+            case let failure as TranscriptionFailure: throw failure
+            case is CancellationError: throw error
+            default: throw TranscriptionFailure.underlying(String(describing: error))
+            }
         }
 
         // Best effort, and deliberately after the dictation is already running:
@@ -165,18 +212,21 @@ public actor SystemTranscriber: Transcriber {
         let input = engine.inputNode
         let hardwareFormat = input.outputFormat(forBus: 0)
         guard hardwareFormat.sampleRate > 0 else {
-            throw TranscriptionFailure.audioUnavailable("no input device")
+            throw TranscriptionFailure.audioUnavailable("giriş aygıtı yok")
         }
 
-        let converter = BufferConverter(from: hardwareFormat, to: analyzerFormat)
+        let converter = try BufferConverter(from: hardwareFormat, to: analyzerFormat)
+        let meter = InputMeter(sampleRate: hardwareFormat.sampleRate)
+        self.meter = meter
 
         // 4096 frames is about a tenth of a second at the usual rates: short
         // enough that the indicator keeps up, long enough not to wake the audio
         // thread pointlessly.
         input.installTap(onBus: 0, bufferSize: 4096, format: hardwareFormat) { buffer, time in
             // This closure runs on the audio thread. It must not allocate much,
-            // must not lock, and must not touch the actor — yielding into a
-            // continuation is all it does.
+            // must not lock, and must not touch the actor — measuring the level
+            // into atomics and yielding into a continuation is all it does.
+            meter.measure(buffer)
             guard let converted = converter.convert(buffer) else { return }
             continuation.yield(AnalyzerInput(buffer: converted, bufferStartTime: nil))
             _ = time
@@ -195,10 +245,12 @@ public actor SystemTranscriber: Transcriber {
     // MARK: - Reading results
 
     private func consume(
-        _ results: some AsyncSequence<DictationTranscriber.Result, any Error> & Sendable
+        _ results: some AsyncSequence<DictationTranscriber.Result, any Error> & Sendable,
+        of ours: Int
     ) async {
         do {
             for try await result in results {
+                guard dictation == ours else { return }
                 let text = String(result.text.characters)
                 if result.isFinal {
                     // Committed to. Joined with a space rather than glued: the
@@ -211,23 +263,25 @@ public actor SystemTranscriber: Transcriber {
                 }
                 yieldUpdate()
             }
+            guard dictation == ours else { return }
             finish(throwing: nil)
         } catch is CancellationError {
+            guard dictation == ours else { return }
             finish(throwing: nil)
         } catch {
+            guard dictation == ours else { return }
             finish(throwing: TranscriptionFailure.underlying(String(describing: error)))
         }
     }
 
     private func yieldUpdate() {
-        guard !abandoned else { return }
         updates?.yield(TranscriptUpdate(settled: settled, volatile: volatileTail))
     }
 
     private func finish(throwing error: (any Error)?) {
         let continuation = updates
         updates = nil
-        if let error, !abandoned {
+        if let error {
             continuation?.finish(throwing: error)
         } else {
             continuation?.finish()
@@ -240,37 +294,48 @@ public actor SystemTranscriber: Transcriber {
         // The audio ends here; the words do not. Finalising is what makes the
         // recogniser commit to the tail it was still revising, and the results
         // sequence ends after that — which is what closes the caller's stream.
+        let ours = dictation
         stopAudio()
         inputContinuation?.finish()
         inputContinuation = nil
 
+        // Kept on the actor while it finalises, so that a `cancel()` during the
+        // wait reaches it.
+        guard let analyzer else { return }
         do {
-            try await analyzer?.finalizeAndFinishThroughEndOfInput()
+            try await analyzer.finalizeAndFinishThroughEndOfInput()
         } catch {
-            finish(throwing: TranscriptionFailure.underlying(String(describing: error)))
-            await tearDown()
-            throw TranscriptionFailure.underlying(String(describing: error))
+            guard dictation == ours else { return }
+            let failure = TranscriptionFailure.underlying(String(describing: error))
+            finish(throwing: failure)
+            tearDown()
+            throw failure
         }
-        await tearDown()
+        guard dictation == ours else { return }
+        tearDown()
     }
 
     public func cancel() async {
-        abandoned = true
+        dictation += 1
         stopAudio()
         inputContinuation?.finish()
         inputContinuation = nil
-        await analyzer?.cancelAndFinishNow()
+        let analyzer = self.analyzer
         finish(throwing: nil)
-        await tearDown()
+        tearDown()
+        // Last, and on the one captured above: by the time it returns, a new
+        // dictation may already have started.
+        await analyzer?.cancelAndFinishNow()
     }
 
     private func stopAudio() {
+        meter = nil
         guard let engine else { return }
         if engine.isRunning { engine.stop() }
         engine.inputNode.removeTap(onBus: 0)
     }
 
-    private func tearDown() async {
+    private func tearDown() {
         resultsTask = nil
         engine = nil
         analyzer = nil
@@ -288,13 +353,22 @@ private final class BufferConverter: @unchecked Sendable {
     private let outputFormat: AVAudioFormat
     private let ratio: Double
 
-    init(from input: AVAudioFormat, to output: AVAudioFormat) {
+    init(from input: AVAudioFormat, to output: AVAudioFormat) throws {
         self.outputFormat = output
         self.ratio = output.sampleRate / input.sampleRate
         // Nil when the formats already match, which saves a copy per buffer on
         // the machines where they do.
-        self.converter = input == output ? nil : AVAudioConverter(from: input, to: output)
-        self.converter?.primeMethod = .none
+        if input == output {
+            self.converter = nil
+        } else if let converter = AVAudioConverter(from: input, to: output) {
+            converter.primeMethod = .none
+            self.converter = converter
+        } else {
+            // Not passed through as if they matched: the recogniser would be
+            // handed audio in a format it never asked for.
+            throw TranscriptionFailure.audioUnavailable(
+                "mikrofonun \(input) biçiminden tanıyıcının \(output) biçimine dönüştürücü yok")
+        }
     }
 
     func convert(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
@@ -337,5 +411,55 @@ private final class PendingInput: @unchecked Sendable {
     func take() -> AVAudioPCMBuffer? {
         defer { buffer = nil }
         return buffer
+    }
+}
+
+/// The microphone's level and how much it has recorded, measured in the tap.
+/// Atomics rather than a lock because the tap runs on the audio thread; only it
+/// writes, and a reading one buffer stale is still the right reading.
+final class InputMeter: Sendable {
+    private let levelBits = Atomic<UInt32>(0)
+    private let frames = Atomic<Int>(0)
+    private let sampleRate: Double
+
+    /// The quietest level a meter shows anything for, in dBFS.
+    static let meterFloor: Float = -50
+    /// The level a meter shows as full, in dBFS. A voice at dictation distance
+    /// peaks around here, so a meter that only fills for shouting reads as dead.
+    static let meterCeiling: Float = -10
+    /// How much of the previous level survives each buffer, which is about a
+    /// tenth of a second: high enough that the meter falls rather than flickers.
+    static let meterDecay: Float = 0.7
+
+    init(sampleRate: Double) {
+        self.sampleRate = sampleRate
+    }
+
+    func measure(_ buffer: AVAudioPCMBuffer) {
+        let count = Int(buffer.frameLength)
+        frames.wrappingAdd(count, ordering: .relaxed)
+        guard count > 0, let samples = buffer.floatChannelData?[0] else { return }
+
+        var sumOfSquares: Float = 0
+        for index in 0..<count {
+            sumOfSquares += samples[index] * samples[index]
+        }
+        let rms = (sumOfSquares / Float(count)).squareRoot()
+        let next = max(Self.level(ofRMS: rms), level * Self.meterDecay)
+        levelBits.store(next.bitPattern, ordering: .relaxed)
+    }
+
+    var level: Float { Float(bitPattern: levelBits.load(ordering: .relaxed)) }
+
+    var seconds: Double {
+        sampleRate > 0 ? Double(frames.load(ordering: .relaxed)) / sampleRate : 0
+    }
+
+    /// An RMS level as a meter reading: 0 at `meterFloor` and below, 1 at
+    /// `meterCeiling` and above, in proportion to the decibels in between.
+    static func level(ofRMS rms: Float) -> Float {
+        guard rms > 0 else { return 0 }
+        let decibels = 20 * log10(rms)
+        return min(1, max(0, (decibels - meterFloor) / (meterCeiling - meterFloor)))
     }
 }

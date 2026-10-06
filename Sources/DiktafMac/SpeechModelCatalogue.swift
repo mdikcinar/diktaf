@@ -136,16 +136,23 @@ public struct SpeechModelCatalogue: Sendable {
         await AssetInventory.reservedLocales
     }
 
-    /// Asks the system to keep this language's model rather than reclaiming it.
+    /// Asks the system to keep this language's model rather than reclaiming it,
+    /// and answers whether it is reserved now.
     ///
     /// Worth doing for the language actually dictated in: an unreserved model can
     /// be removed to free space, and the next dictation would then fail with a
     /// download to do. Five may be held at once, so this reports rather than
     /// insists.
+    ///
+    /// The answer is checked against `reservedLocales` when the framework says
+    /// no, because `AssetInventory.reserve` answers `false` for a language that
+    /// is already reserved — which is the outcome asked for, not a refusal.
     @discardableResult
     public func reserve(_ locale: Locale) async -> Bool {
         guard let resolved = await resolve(locale) else { return false }
-        return (try? await AssetInventory.reserve(locale: resolved)) ?? false
+        if (try? await AssetInventory.reserve(locale: resolved)) == true { return true }
+        let wanted = resolved.identifier(.bcp47)
+        return await reservedLocales().contains { $0.identifier(.bcp47) == wanted }
     }
 
     public enum ModelState: Sendable, Equatable {

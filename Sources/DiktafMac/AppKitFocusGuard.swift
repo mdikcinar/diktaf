@@ -34,13 +34,28 @@ public final class AppKitFocusGuard: FocusGuard {
         }
     }
 
+    /// Activates it even when it is still frontmost, which is the case described
+    /// above, then waits for that to land: activation is asynchronous, and a
+    /// paste sent sooner arrives wherever the keyboard was.
     public func restore() {
         guard let application = remembered.application, !application.isTerminated else { return }
-        guard application.processIdentifier
-                != NSWorkspace.shared.frontmostApplication?.processIdentifier else {
-            return                     // never left; nothing to put back
-        }
         application.activate(options: [])
+        waitUntilFrontmost(application, atMost: 0.3)
+    }
+
+    /// `frontmostApplication` only changes when the main run loop runs, so on the
+    /// main thread sleeping would block the very update being waited for.
+    private func waitUntilFrontmost(_ application: NSRunningApplication, atMost seconds: TimeInterval) {
+        let deadline = Date(timeIntervalSinceNow: seconds)
+        while NSWorkspace.shared.frontmostApplication?.processIdentifier
+                != application.processIdentifier,
+              Date() < deadline {
+            if Thread.isMainThread {
+                RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.01))
+            } else {
+                Thread.sleep(forTimeInterval: 0.01)
+            }
+        }
     }
 
     /// A box, because `FocusGuard` is synchronous and Sendable while

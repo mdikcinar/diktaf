@@ -59,4 +59,8 @@ public enum DictationEvent: Sendable, Equatable {
     /// A finished dictation whose destination was the agent, handed over rather
     /// than pasted.
     case agentPrompt(String)
+
+    /// The current dictation's progress, after every step. Emitted before the
+    /// state change that follows the step, so the state never arrives first.
+    case progress(DictationProgress)
 }

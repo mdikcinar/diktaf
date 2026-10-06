@@ -37,8 +37,8 @@ struct ShortcutRecorder: View {
             }
             .buttonStyle(.bordered)
             .help(isRecording
-                  ? "Press a combination, or Esc to keep the current one"
-                  : "Click, then press the combination you want")
+                  ? "Bir kombinasyona basın; mevcut olanı korumak için Esc"
+                  : "Tıklayın, sonra istediğiniz kombinasyona basın")
 
             Button {
                 onChange(nil)
@@ -47,7 +47,7 @@ struct ShortcutRecorder: View {
                     .foregroundStyle(.tertiary)
             }
             .buttonStyle(.borderless)
-            .help("Remove this shortcut")
+            .help("Bu kısayolu kaldır")
             // Kept in the layout while it is unusable, so the field beside it does
             // not shift about as shortcuts are set and cleared.
             .opacity(combination != nil && !isRecording ? 1 : 0)
@@ -57,8 +57,8 @@ struct ShortcutRecorder: View {
     }
 
     private var label: String {
-        if isRecording { return "Press a key…" }
-        return combination?.displayName ?? "None"
+        if isRecording { return "Bir tuşa basın…" }
+        return combination?.displayName ?? "Yok"
     }
 
     // MARK: - Recording
@@ -78,7 +78,8 @@ struct ShortcutRecorder: View {
                 handle(keyDown: event)
             case .otherMouseDown:
                 commit(KeyCombination.mouseButton(
-                    event.buttonNumber, modifiers: event.modifierFlags.asCombinationModifiers))
+                    KeyCodes.mouseButton(forButtonNumber: event.buttonNumber),
+                    modifiers: event.modifierFlags.asCombinationModifiers))
             default:
                 break
             }
@@ -111,7 +112,8 @@ struct ShortcutRecorder: View {
             }
         }
 
-        guard let name = ShortcutRecorder.keyName(for: event) else {
+        guard let name = ShortcutRecorder.keyName(for: event),
+              !(modifiers.isEmpty && ShortcutRecorder.typesText(name)) else {
             NSSound.beep()
             return
         }
@@ -132,4 +134,17 @@ struct ShortcutRecorder: View {
     private static func keyName(for event: NSEvent) -> String? {
         KeyCodes.portableName(forVirtualKey: event.keyCode)
     }
+
+    /// Keys that type something. Bound with no modifier, Carbon takes the key
+    /// from every application the moment it is recorded, and typing it starts a
+    /// dictation instead.
+    private static func typesText(_ name: String) -> Bool {
+        name.count == 1 || typingKeys.contains(name)
+    }
+
+    private static let typingKeys: Set<String> = [
+        "space", "return", "enter", "tab",
+        "equal", "minus", "leftbracket", "rightbracket", "quote", "semicolon",
+        "backslash", "comma", "slash", "period", "grave",
+    ]
 }

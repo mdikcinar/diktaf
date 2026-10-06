@@ -38,6 +38,35 @@ actor Gate {
     }
 }
 
+/// Something a test can raise from inside a task and wait for outside it.
+final class Flag: Sendable {
+    private let raised = Mutex(false)
+
+    func raise() { raised.withLock { $0 = true } }
+
+    var isRaised: Bool { raised.withLock { $0 } }
+}
+
+/// A clock that moves on a second every time it is read, so each timestamp
+/// says which reading took it.
+final class TickingClock: Sendable {
+    let start = Date(timeIntervalSince1970: 1_700_000_000)
+    private let readings = Mutex(0)
+
+    func now() -> Date {
+        let reading = readings.withLock { count -> Int in
+            defer { count += 1 }
+            return count
+        }
+        return at(reading)
+    }
+
+    /// What the clock said on that reading, counting from zero.
+    func at(_ reading: Int) -> Date {
+        start.addingTimeInterval(TimeInterval(reading))
+    }
+}
+
 // MARK: - Transcriber
 
 /// Yields a scripted sequence, then ends the stream when it is stopped.
@@ -56,7 +85,9 @@ final class FakeTranscriber: Transcriber {
     private let updates: [TranscriptUpdate]
     private let startFailure: (any Error)?
     private let failOnStop: (any Error)?
+    private let startGate: Gate?
     private let stopGate: Gate?
+    private let cancelDelay: Duration?
     private let state = Mutex(State())
     private let journal: Journal?
 
@@ -64,13 +95,17 @@ final class FakeTranscriber: Transcriber {
         updates: [TranscriptUpdate] = [],
         startFailure: (any Error)? = nil,
         failOnStop: (any Error)? = nil,
+        startGate: Gate? = nil,
         stopGate: Gate? = nil,
+        cancelDelay: Duration? = nil,
         journal: Journal? = nil
     ) {
         self.updates = updates
         self.startFailure = startFailure
         self.failOnStop = failOnStop
+        self.startGate = startGate
         self.stopGate = stopGate
+        self.cancelDelay = cancelDelay
         self.journal = journal
     }
 
@@ -81,6 +116,9 @@ final class FakeTranscriber: Transcriber {
     func start() async throws -> AsyncThrowingStream<TranscriptUpdate, any Error> {
         journal?.record("transcriber.start")
         state.withLock { $0.startCount += 1 }
+        // Held here, the recogniser is still loading and the session is still
+        // idle — the window a second press or a cancel can land in.
+        await startGate?.wait()
         if let startFailure { throw startFailure }
 
         let (stream, continuation) = AsyncThrowingStream
@@ -107,7 +145,11 @@ final class FakeTranscriber: Transcriber {
     func cancel() async {
         journal?.record("transcriber.cancel")
         state.withLock { $0.cancelCount += 1 }
+        // A real recogniser takes a moment to wind down, and a session that is
+        // still half-cancelled during that moment has time to deliver anyway.
+        if let cancelDelay { try? await Task.sleep(for: cancelDelay) }
         finish(throwing: CancellationError())
+        journal?.record("transcriber.cancelled")
     }
 
     /// Ends the stream the way a recogniser losing its microphone would: on its
@@ -136,6 +178,9 @@ final class FakeRefiner: TextRefiner {
         case failing(RefinementFailure)
         /// Never returns, so the deadline is what ends it.
         case hanging
+        /// Replies once the gate opens, and not before: cancelling it does
+        /// nothing, the way a subprocess that is not listening behaves.
+        case held(Gate, reply: String)
     }
 
     private let behaviour: Behaviour
@@ -159,8 +204,16 @@ final class FakeRefiner: TextRefiner {
         case .hanging:
             // Long enough that the injected clock always wins, and cancellable
             // so the losing branch does not outlive the test.
-            try await Task.sleep(for: .seconds(3600))
+            do {
+                try await Task.sleep(for: .seconds(3600))
+            } catch {
+                journal?.record("refiner.cancelled")
+                throw error
+            }
             return text
+        case .held(let gate, let reply):
+            await gate.wait()
+            return reply
         }
     }
 }
@@ -230,6 +283,32 @@ final class FakeFocusGuard: FocusGuard {
 
 // MARK: - Settings
 
+/// Settings that are held on one particular read, so a test can catch the
+/// session waiting for them.
+final class HeldSettings: Sendable {
+    private let settings: Settings
+    private let gate: Gate
+    private let heldRead: Int
+    private let count = Mutex(0)
+
+    init(_ settings: Settings = .defaults, holdingRead heldRead: Int, gate: Gate) {
+        self.settings = settings
+        self.gate = gate
+        self.heldRead = heldRead
+    }
+
+    var reads: Int { count.withLock { $0 } }
+
+    func read() async -> Settings {
+        let read = count.withLock { count -> Int in
+            count += 1
+            return count
+        }
+        if read == heldRead { await gate.wait() }
+        return settings
+    }
+}
+
 final class InMemorySettingsStorage: SettingsStorage {
     private let bytes = Mutex<Data?>(nil)
     private let saveFailure: (any Error)?
@@ -264,6 +343,10 @@ final class FakeAgentRunner: AgentRunner {
     enum Behaviour: Sendable {
         case replying(text: String, sessionID: String?)
         case failing(String)
+        /// Says that the session it was asked to resume is gone.
+        case expiring
+        /// Replies once the gate opens, so a test can act while it waits.
+        case held(Gate, text: String, sessionID: String?)
     }
 
     struct Call: Sendable, Equatable {
@@ -271,12 +354,17 @@ final class FakeAgentRunner: AgentRunner {
         let resuming: String?
     }
 
-    private let behaviour: Behaviour
+    /// One behaviour per call, the last repeated once the script runs out.
+    private let script: [Behaviour]
     private let available: Bool
     private let seen = Mutex<[Call]>([])
 
-    init(_ behaviour: Behaviour, available: Bool = true) {
-        self.behaviour = behaviour
+    convenience init(_ behaviour: Behaviour, available: Bool = true) {
+        self.init(script: [behaviour], available: available)
+    }
+
+    init(script: [Behaviour], available: Bool = true) {
+        self.script = script
         self.available = available
     }
 
@@ -285,15 +373,30 @@ final class FakeAgentRunner: AgentRunner {
     func isAvailable() async -> Bool { available }
 
     func run(prompt: String, resuming sessionID: String?) async throws -> AgentReply {
-        seen.withLock { $0.append(Call(prompt: prompt, resuming: sessionID)) }
+        let index = seen.withLock { calls -> Int in
+            calls.append(Call(prompt: prompt, resuming: sessionID))
+            return calls.count - 1
+        }
+        guard let behaviour = script.indices.contains(index) ? script[index] : script.last else {
+            throw RefinementFailure.agentFailed("nothing scripted")
+        }
         switch behaviour {
         case .replying(let text, let id):
             return AgentReply(text: text, sessionID: id)
         case .failing(let message):
             throw RefinementFailure.agentFailed(message)
+        case .expiring:
+            throw FakeSessionExpired()
+        case .held(let gate, let text, let id):
+            await gate.wait()
+            return AgentReply(text: text, sessionID: id)
         }
     }
 }
+
+/// What `FakeAgentRunner` throws for a session that has gone, standing in for
+/// the adapter's own error, which the domain cannot see.
+struct FakeSessionExpired: Error, Equatable {}
 
 // MARK: - Waiting
 

@@ -36,11 +36,18 @@ public actor SettingsService {
     /// The in-memory value is updated even when the write fails, so that the
     /// window shows what the user just chose rather than silently reverting;
     /// the failure is thrown for them to see.
+    ///
+    /// While the stored file is unreadable nothing is written at all, until
+    /// `reset()`: the change is kept in memory and
+    /// `SettingsServiceError.unreadableFile` is thrown. Writing defaults plus
+    /// this one change over the file is exactly the overwrite `loadFailure`
+    /// promises not to do.
     public func update(_ change: @Sendable (inout Settings) -> Void) throws {
         var draft = current
         change(&draft)
         guard draft != current else { return }
         current = draft
+        if let loadFailure { throw SettingsServiceError.unreadableFile(loadFailure) }
         try write(draft)
     }
 
@@ -56,4 +63,11 @@ public actor SettingsService {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try storage.save(try encoder.encode(settings))
     }
+}
+
+public enum SettingsServiceError: Error, Sendable, Equatable {
+    /// The stored file could not be read when the application started, so it
+    /// is left alone and changes stay in memory until the settings are reset.
+    /// The text is why it could not be read.
+    case unreadableFile(String)
 }

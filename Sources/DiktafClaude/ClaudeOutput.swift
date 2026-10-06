@@ -38,7 +38,7 @@ struct ClaudeOutput: Sendable, Equatable {
         }
 
         if payload.is_error == true || payload.subtype == "error" {
-            let detail = payload.error ?? payload.result ?? "the agent reported an error"
+            let detail = payload.error ?? payload.result ?? "claude bir hata bildirdi, ayrıntı vermedi"
             throw ClaudeOutputFailure.reportedError(detail)
         }
 

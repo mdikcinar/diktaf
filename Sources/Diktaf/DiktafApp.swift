@@ -19,8 +19,7 @@ struct DiktafApp: App {
         MenuBarExtra {
             MenuBarContent(model: delegate.model)
         } label: {
-            Image(systemName: delegate.model.menuBarSymbol)
-                .accessibilityLabel(delegate.model.menuBarDescription)
+            MenuBarLabel(model: delegate.model)
         }
         .menuBarExtraStyle(.menu)
 
@@ -50,11 +49,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+/// The icon, and the one view that is always there — which makes it the place
+/// the agent window is opened from when a reply is on its way, since opening a
+/// window takes a view's environment.
+private struct MenuBarLabel: View {
+    let model: AppModel
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Image(systemName: model.menuBarSymbol)
+            .accessibilityLabel(model.menuBarDescription)
+            .onChange(of: model.agentWindowRequests) {
+                openWindow(id: "agent")
+                NSApplication.shared.activate()
+            }
+    }
+}
+
 extension AppModel {
     /// The menu bar icon, which is the whole of Diktaf's presence on screen and
     /// therefore the only place a state can be shown from.
     var menuBarSymbol: String {
-        switch state {
+        if isStarting { return "mic.fill" }
+        return switch state {
         case .idle:
             missingPermissions.isEmpty ? "mic" : "mic.badge.xmark"
         case .recording:
@@ -70,11 +87,11 @@ extension AppModel {
 
     var menuBarDescription: String {
         switch state {
-        case .idle: "Diktaf, idle"
-        case .recording: "Diktaf, recording"
-        case .settling: "Diktaf, finishing the transcript"
-        case .refining: "Diktaf, cleaning up"
-        case .delivering: "Diktaf, pasting"
+        case .idle: "Diktaf, hazır"
+        case .recording: "Diktaf, dinliyor"
+        case .settling: "Diktaf, metne çeviriyor"
+        case .refining: "Diktaf, temizliyor"
+        case .delivering: "Diktaf, yapıştırıyor"
         case .failed(let message): "Diktaf: \(message)"
         }
     }

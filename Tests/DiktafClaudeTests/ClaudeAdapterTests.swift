@@ -240,7 +240,7 @@ struct ClaudeRefinerTests {
             runner: FakeProcessRunner(outcome(recordedSuccess)))
 
         await #expect(throws: RefinementFailure.agentUnavailable(
-            "the claude command was not found on this machine")) {
+            "claude komutu bu Mac'te bulunamadı")) {
             try await refiner.refine(text: "hello", instruction: "rules")
         }
     }
@@ -260,7 +260,7 @@ struct ClaudeRefinerTests {
         let runner = FakeProcessRunner(outcome("", exitCode: 127))
 
         await #expect(throws: RefinementFailure.agentFailed(
-            "the claude command exited 127")) {
+            "claude komutu 127 koduyla çıktı")) {
             try await refiner(runner).refine(text: "hello", instruction: "rules")
         }
     }
@@ -321,6 +321,25 @@ struct ClaudeRefinerTests {
             .refine(text: "hello", instruction: "rules")
 
         #expect(runner.last?.timeoutSeconds == 1)
+    }
+
+    /// The deadline is a setting, and this object lives as long as the
+    /// application: one read at construction is the one before the user changed it.
+    @Test("the deadline is asked at every cleanup, not once")
+    func readsTheDeadlinePerCall() async throws {
+        let seconds = Mutex(20)
+        let runner = FakeProcessRunner(outcome(recordedSuccess))
+        let refiner = ClaudeRefiner(
+            executablePath: realExecutable, model: { "haiku" },
+            timeoutSeconds: { seconds.withLock { $0 } }, runner: runner)
+
+        _ = try await refiner.refine(text: "hello", instruction: "rules")
+        seconds.withLock { $0 = 45 }
+        _ = try await refiner.refine(text: "hello", instruction: "rules")
+        seconds.withLock { $0 = 0 }
+        _ = try await refiner.refine(text: "hello", instruction: "rules")
+
+        #expect(runner.invocations.map(\.timeoutSeconds) == [20, 45, 1])
     }
 }
 

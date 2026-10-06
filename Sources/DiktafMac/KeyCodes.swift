@@ -101,3 +101,12 @@ extension KeyCodes {
         return table
     }()
 }
+
+extension KeyCodes {
+    /// The domain's number for an `NSEvent.buttonNumber`, which counts from 0
+    /// where `KeyCombination` counts from 1: the middle button is 2 there and
+    /// "mouse3" here.
+    public static func mouseButton(forButtonNumber buttonNumber: Int) -> Int {
+        buttonNumber + 1
+    }
+}

@@ -11,7 +11,7 @@ import Foundation
 public struct ClaudeRefiner: TextRefiner {
     private let executablePath: String?
     private let model: @Sendable () async -> String?
-    private let timeout: Duration
+    private let timeoutSeconds: @Sendable () async -> Int
     private let runner: any ProcessRunner
 
     /// - Parameters:
@@ -43,26 +43,48 @@ public struct ClaudeRefiner: TextRefiner {
                   timeoutSeconds: timeoutSeconds, runner: SystemProcessRunner())
     }
 
+    /// The deadline as something to ask as well, for the same reason: it is a
+    /// setting too, and the process is killed at whatever this answers.
+    public init(
+        executablePath: String? = nil,
+        model: @escaping @Sendable () async -> String?,
+        timeoutSeconds: @escaping @Sendable () async -> Int
+    ) {
+        self.init(executablePath: executablePath, model: model,
+                  timeoutSeconds: timeoutSeconds, runner: SystemProcessRunner())
+    }
+
     init(
         executablePath: String?,
         model: @escaping @Sendable () async -> String?,
         timeoutSeconds: Int,
         runner: any ProcessRunner
     ) {
+        self.init(executablePath: executablePath, model: model,
+                  timeoutSeconds: { timeoutSeconds }, runner: runner)
+    }
+
+    init(
+        executablePath: String?,
+        model: @escaping @Sendable () async -> String?,
+        timeoutSeconds: @escaping @Sendable () async -> Int,
+        runner: any ProcessRunner
+    ) {
         self.executablePath = executablePath
         self.model = model
-        self.timeout = .seconds(max(1, timeoutSeconds))
+        self.timeoutSeconds = timeoutSeconds
         self.runner = runner
     }
 
     public func refine(text: String, instruction: String) async throws -> String {
         guard let executable = ClaudeExecutable.locate(explicitPath: executablePath) else {
             throw RefinementFailure.agentUnavailable(
-                "the claude command was not found on this machine")
+                "claude komutu bu Mac'te bulunamadı")
         }
 
         let invocation = ClaudeInvocation(
             purpose: .cleanup(instruction: instruction), model: await model())
+        let timeout = Duration.seconds(max(1, await timeoutSeconds()))
 
         let outcome: ProcessOutcome
         do {
@@ -102,6 +124,6 @@ public struct ClaudeRefiner: TextRefiner {
         if !stderr.isEmpty { return stderr }
         let stdout = outcome.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
         if !stdout.isEmpty { return String(stdout.prefix(400)) }
-        return "the claude command exited \(outcome.exitCode)"
+        return "claude komutu \(outcome.exitCode) koduyla çıktı"
     }
 }

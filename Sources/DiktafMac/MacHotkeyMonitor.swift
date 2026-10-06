@@ -90,12 +90,12 @@ final class MouseButtonMonitor: HotkeyMonitor, @unchecked Sendable {
             // user would have no way to click anything again.
             globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.otherMouseDown]) {
                 [weak self] event in
-                self?.handle(button: event.buttonNumber, flags: event.modifierFlags)
+                self?.handle(buttonNumber: event.buttonNumber, flags: event.modifierFlags)
             }
             localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.otherMouseDown]) {
                 [weak self] event in
                 let handled = self?.handle(
-                    button: event.buttonNumber, flags: event.modifierFlags) ?? false
+                    buttonNumber: event.buttonNumber, flags: event.modifierFlags) ?? false
                 // Swallowed when it was ours, so a middle click bound to
                 // dictation does not also do whatever it would have done.
                 return handled ? nil : event
@@ -113,8 +113,10 @@ final class MouseButtonMonitor: HotkeyMonitor, @unchecked Sendable {
     }
 
     @discardableResult
-    private func handle(button: Int, flags: NSEvent.ModifierFlags) -> Bool {
-        let pressed = KeyCombination.mouseButton(button, modifiers: flags.asCombinationModifiers)
+    private func handle(buttonNumber: Int, flags: NSEvent.ModifierFlags) -> Bool {
+        let pressed = KeyCombination.mouseButton(
+            KeyCodes.mouseButton(forButtonNumber: buttonNumber),
+            modifiers: flags.asCombinationModifiers)
 
         lock.lock()
         let action = bindings.first { $0.combination == pressed }?.action

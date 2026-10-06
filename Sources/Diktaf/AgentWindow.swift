@@ -13,12 +13,12 @@ struct AgentWindow: View {
         VStack(spacing: 0) {
             if model.agentTurns.isEmpty {
                 ContentUnavailableView {
-                    Label("Nothing asked yet", systemImage: "bubble.left.and.text.bubble.right")
+                    Label("Henüz bir şey sorulmadı", systemImage: "bubble.left.and.text.bubble.right")
                 } description: {
                     if let key = model.settings.combination(for: .agent) {
-                        Text("Press \(key.displayName), say what you want, press it again.")
+                        Text("\(key.displayName) tuşuna basın, ne istediğinizi söyleyin, yeniden basın.")
                     } else {
-                        Text("Set a key for the agent in Settings → Shortcuts.")
+                        Text("Ayarlar → Kısayollar'dan Agent için bir tuş atayın.")
                     }
                 }
             } else {
@@ -37,11 +37,11 @@ struct AgentWindow: View {
             HStack {
                 if model.agentIsThinking {
                     ProgressView().controlSize(.small)
-                    Text("Thinking…").foregroundStyle(.secondary)
+                    Text("Düşünüyor…").foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("Start a new conversation", action: model.clearConversation)
-                    .disabled(model.agentTurns.isEmpty)
+                Button("Yeni konuşma başlat", action: model.clearConversation)
+                    .disabled(model.agentTurns.isEmpty || model.agentIsThinking)
             }
             .padding(10)
         }
@@ -62,7 +62,7 @@ private struct TurnView: View {
                 Text(reply)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Button("Copy", systemImage: "doc.on.doc") {
+                Button("Kopyala", systemImage: "doc.on.doc") {
                     PasteboardWriter.write(reply)
                 }
                 .buttonStyle(.borderless)
@@ -79,7 +79,7 @@ private struct TurnView: View {
 
 /// A copy button needs the clipboard, and reaching for the adapter from a view
 /// is the one place a shortcut here is honest: nothing about it is domain logic.
-private enum PasteboardWriter {
+enum PasteboardWriter {
     static func write(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)

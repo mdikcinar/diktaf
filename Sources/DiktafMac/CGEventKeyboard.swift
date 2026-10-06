@@ -1,3 +1,4 @@
+import ApplicationServices
 import CoreGraphics
 import DiktafCore
 import Foundation
@@ -13,8 +14,9 @@ import Foundation
 /// And the thing to know before debugging this for an afternoon: **macOS reports
 /// success either way**. Post a key event without having been granted
 /// Accessibility and every call returns cleanly, nothing is logged, and the key
-/// reaches nobody. There is no error to catch, which is why the caller asks
-/// `PermissionAuthority` first rather than finding out afterwards.
+/// reaches nobody. There is no error to catch, which is why both methods ask
+/// `AXIsProcessTrusted` before posting anything and throw when the answer is
+/// no: a failure the session can report beats text that silently goes nowhere.
 public struct CGEventKeyboard: KeyboardSender {
     /// The combination that means paste on this platform.
     private let pasteCombination: KeyCombination
@@ -24,6 +26,7 @@ public struct CGEventKeyboard: KeyboardSender {
     }
 
     public func paste() throws {
+        try requireTrust()
         guard let key = KeyCodes.virtualKey(for: pasteCombination.key) else {
             throw KeyboardFailure.unknownKey(pasteCombination.key)
         }
@@ -38,6 +41,7 @@ public struct CGEventKeyboard: KeyboardSender {
     /// something else entirely.
     public func type(_ text: String) throws {
         guard !text.isEmpty else { return }
+        try requireTrust()
         let source = CGEventSource(stateID: .combinedSessionState)
 
         // In chunks, because a single event carries a bounded string and a
@@ -52,6 +56,15 @@ public struct CGEventKeyboard: KeyboardSender {
             up.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)
             down.post(tap: .cghidEventTap)
             up.post(tap: .cghidEventTap)
+        }
+    }
+
+    /// `TranscriptionFailure.notPermitted(.keyboardControl)` because it is the
+    /// one failure in the domain that already says this — "not allowed to press
+    /// keys" — in words the session shows.
+    private func requireTrust() throws {
+        guard AXIsProcessTrusted() else {
+            throw TranscriptionFailure.notPermitted(.keyboardControl)
         }
     }
 

@@ -1,3 +1,4 @@
+import AVFoundation
 import DiktafCore
 import Foundation
 import Testing
@@ -128,6 +129,18 @@ struct LocaleReservationTests {
         #expect(reserved.contains(first.identifier(.bcp47)))
     }
 
+    /// Why the test above failed on every run but the first: `AssetInventory
+    /// .reserve` answers `false` for a language already reserved, so one held
+    /// since the last launch looked as if it could not be kept.
+    @Test("reserving a language that is already reserved still reports it reserved")
+    func reservingTwiceIsStillReserved() async {
+        let installed = await catalogue.installedLocales()
+        guard let first = installed.first else { return }
+
+        await catalogue.reserve(first)
+        #expect(await catalogue.reserve(first))
+    }
+
     @Test("there is a limit, and it is the system's")
     func hasALimit() async {
         #expect(SpeechModelCatalogue.maximumReservedLocales > 0)
@@ -139,5 +152,45 @@ struct LocaleReservationTests {
     @Test("an unsupported language is not reserved")
     func refusesUnsupportedLanguages() async {
         #expect(await catalogue.reserve(Locale(identifier: "zz-ZZ")) == false)
+    }
+}
+
+/// The level the indicator draws, measured in the tap on the audio thread.
+@Suite("Input level")
+struct InputMeterTests {
+    @Test("the meter maps -50 dBFS to empty and -10 dBFS to full")
+    func meterRange() {
+        #expect(InputMeter.level(ofRMS: 0) == 0)
+        #expect(abs(InputMeter.level(ofRMS: rms(decibels: -50))) < 0.001)
+        #expect(abs(InputMeter.level(ofRMS: rms(decibels: -30)) - 0.5) < 0.001)
+        #expect(abs(InputMeter.level(ofRMS: rms(decibels: -10)) - 1) < 0.001)
+        #expect(InputMeter.level(ofRMS: 1) == 1)
+    }
+
+    @Test("a loud buffer fills the meter, silence lets it fall, and time is counted")
+    func measuresBuffers() throws {
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1))
+        let meter = InputMeter(sampleRate: 48_000)
+
+        meter.measure(try buffer(of: 0.5, frames: 4_800, format: format))
+        #expect(meter.level == 1)
+
+        meter.measure(try buffer(of: 0, frames: 4_800, format: format))
+        #expect(meter.level < 1)
+        #expect(meter.level > 0)
+        #expect(abs(meter.seconds - 0.2) < 0.000_1)
+    }
+
+    private func buffer(of value: Float, frames: Int, format: AVAudioFormat) throws -> AVAudioPCMBuffer {
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format,
+                                                   frameCapacity: AVAudioFrameCount(frames)))
+        buffer.frameLength = AVAudioFrameCount(frames)
+        let channel = try #require(buffer.floatChannelData?[0])
+        for index in 0..<frames { channel[index] = value }
+        return buffer
+    }
+
+    private func rms(decibels: Double) -> Float {
+        Float(pow(10.0, decibels / 20.0))
     }
 }

@@ -12,7 +12,7 @@ extension KeyCombination {
         let tokens = text
             .split(whereSeparator: { $0 == "+" || $0 == "-" })
             // Spaces removed inside a token as well as around it, so that the
-            // names with one in them — "Mouse 4", "Middle Click" — survive being
+            // names with one in them — "Fare 4", "Orta Tık" — survive being
             // written out and read back.
             .map { String($0).trimmed.lowercased().replacing(" ", with: "") }
             .filter { !$0.isEmpty }
@@ -47,19 +47,22 @@ extension KeyCombination {
         (modifiers.canonicalNames + [readableKey]).joined(separator: "+")
     }
 
-    /// The name a mouse button is stored under, whatever it was written as.
+    /// The name a mouse button is stored under, whatever it was written as —
+    /// the English spellings included, though the display name is Turkish.
     private static func canonicalKeyName(_ token: String) -> String {
         switch token {
-        case "middleclick", "middlebutton", "mousemiddle": "mouse3"
+        case "middleclick", "middlebutton", "mousemiddle", "ortatık", "ortatik": "mouse3"
+        case let fare where fare.hasPrefix("fare") && Int(fare.dropFirst(4)) != nil:
+            "mouse" + fare.dropFirst(4)
         default: token
         }
     }
 
     private var readableKey: String {
         if let button = mouseButton {
-            // Named where it has a name. "Mouse 3" is the middle one on every
+            // Named where it has a name. "Fare 3" is the middle one on every
             // mouse there is, and calling it that is friendlier than a number.
-            return button == 3 ? "Middle Click" : "Mouse \(button)"
+            return button == 3 ? "Orta Tık" : "Fare \(button)"
         }
         return key.capitalizedKeyName
     }

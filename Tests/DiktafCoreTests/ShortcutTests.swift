@@ -72,7 +72,7 @@ struct MouseButtonTests {
 
         #expect(combination.mouseButton == 4)
         #expect(combination.isMouseButton)
-        #expect(combination.displayName == "Ctrl+Mouse 4")
+        #expect(combination.displayName == "Ctrl+Fare 4")
     }
 
     /// Binding the left or right button would leave the user unable to click
@@ -86,7 +86,8 @@ struct MouseButtonTests {
 
     @Test("the middle one is called what people call it")
     func namesTheMiddleButton() {
-        #expect(KeyCombination.mouseButton(3).displayName == "Middle Click")
+        #expect(KeyCombination.mouseButton(3).displayName == "Orta Tık")
+        #expect(KeyCombination(parsing: "Orta Tık") == KeyCombination.mouseButton(3))
         #expect(KeyCombination(parsing: "Middle Click") == KeyCombination.mouseButton(3))
         #expect(KeyCombination(parsing: "mouse3") == KeyCombination.mouseButton(3))
     }
@@ -229,7 +230,7 @@ struct ReservedCombinationTests {
         if case .reservedBySystem(let action, let combination, let owner) = problems[0] {
             #expect(action == .toggle)
             #expect(combination == ctrlSpace)
-            #expect(owner.contains("input source"))
+            #expect(owner.contains("giriş kaynağı"))
         } else {
             Issue.record("expected a reservedBySystem problem, got \(problems)")
         }

@@ -53,7 +53,7 @@ public struct ClaudeAgentRunner: AgentRunner {
     public func run(prompt: String, resuming sessionID: String?) async throws -> AgentReply {
         guard let executable = ClaudeExecutable.locate(explicitPath: executablePath) else {
             throw RefinementFailure.agentUnavailable(
-                "the claude command was not found on this machine")
+                "claude komutu bu Mac'te bulunamadı")
         }
 
         let invocation = ClaudeInvocation(

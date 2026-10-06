@@ -15,6 +15,19 @@ public struct CleanupRule: Identifiable, Codable, Sendable, Equatable {
         self.text = text
         self.isEnabled = isEnabled
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, text, isEnabled
+    }
+
+    /// Only the sentence is required. A rule written into the file by hand has
+    /// no identifier, and a rule somebody bothered to write is meant to be on.
+    public init(from decoder: any Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        text = try box.decode(String.self, forKey: .text)
+        id = (try? box.decodeIfPresent(UUID.self, forKey: .id)) ?? UUID()
+        isEnabled = (try? box.decodeIfPresent(Bool.self, forKey: .isEnabled)) ?? true
+    }
 }
 
 /// The rules, plus room for anything they do not cover.
@@ -29,6 +42,20 @@ public struct CleanupRuleSet: Codable, Sendable, Equatable {
     public init(rules: [CleanupRule] = [], extraInstruction: String? = nil) {
         self.rules = rules
         self.extraInstruction = extraInstruction
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case rules, extraInstruction
+    }
+
+    /// A rule that cannot be read is dropped and the others kept. Rules that
+    /// are not a list at all still fail, so that `Settings` falls back to the
+    /// recommended set rather than to none.
+    public init(from decoder: any Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        rules = try box.decodeIfPresent([Forgiving<CleanupRule>].self, forKey: .rules)?
+            .compactMap(\.value) ?? []
+        extraInstruction = try? box.decodeIfPresent(String.self, forKey: .extraInstruction)
     }
 
     /// What a transcript needs done to it whatever else the user adds.

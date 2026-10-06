@@ -38,6 +38,43 @@ final class EventLog: Sendable {
         all.compactMap { if case .agentPrompt(let prompt) = $0 { prompt } else { nil } }
     }
 
+    var progress: [DictationProgress] {
+        all.compactMap { if case .progress(let progress) = $0 { progress } else { nil } }
+    }
+
+    func expectProgress(
+        _ expected: [DictationProgress],
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async {
+        try? await waitUntil("progress") { self.progress == expected }
+        #expect(progress == expected, sourceLocation: sourceLocation)
+    }
+
+    /// The phases with every other event in its place among them, which is
+    /// what a test about the order of progress and state is looking at.
+    var timeline: [String] {
+        var names: [String] = []
+        for event in all {
+            switch event {
+            case .state(let state):
+                let name = Self.phase(of: state)
+                if names.last != name { names.append(name) }
+            case .progress: names.append("progress")
+            case .notice: names.append("notice")
+            case .agentPrompt: names.append("agentPrompt")
+            }
+        }
+        return names
+    }
+
+    func expectTimeline(
+        _ expected: [String],
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async {
+        try? await waitUntil("timeline") { self.timeline == expected }
+        #expect(timeline == expected, sourceLocation: sourceLocation)
+    }
+
     /// Waits for the drain task to catch up, then asserts.
     ///
     /// The events are handed over synchronously but read on a task of its own,
@@ -83,17 +120,21 @@ final class EventLog: Sendable {
     var phases: [String] {
         var names: [String] = []
         for state in states {
-            let name = switch state {
-            case .idle: "idle"
-            case .recording: "recording"
-            case .settling: "settling"
-            case .refining: "refining"
-            case .delivering: "delivering"
-            case .failed: "failed"
-            }
+            let name = Self.phase(of: state)
             if names.last != name { names.append(name) }
         }
         return names
+    }
+
+    private static func phase(of state: DictationState) -> String {
+        switch state {
+        case .idle: "idle"
+        case .recording: "recording"
+        case .settling: "settling"
+        case .refining: "refining"
+        case .delivering: "delivering"
+        case .failed: "failed"
+        }
     }
 }
 
@@ -105,33 +146,45 @@ private struct Harness {
     let keyboard: RecordingKeyboard
     let focus: FakeFocusGuard
     let journal: Journal
+    let clock: TickingClock
     let session: DictationSession
 
     /// `sleep` is what the deadline waits on, and the default never returns.
     ///
-    /// It has to. The deadline and the refinement are two children of the same
-    /// group and the first to finish wins, so a sleep that returns immediately
-    /// makes every test about a *successful* cleanup a race — one this suite won
-    /// three times by luck before losing. Never returning means the refiner
-    /// always wins; the one test about the deadline passes an instant sleep so
-    /// that it always loses.
+    /// It has to. The deadline and the refinement race and the first to finish
+    /// wins, so a sleep that returns immediately makes every test about a
+    /// *successful* cleanup a race — one this suite won three times by luck
+    /// before losing. Never returning means the refiner always wins; the tests
+    /// about the deadline pass an instant sleep so that it always loses.
+    ///
+    /// The gates and the delay go to the transcriber built here, which shares
+    /// the harness's journal; a test that passes its own transcriber sets them
+    /// on that instead.
     init(
         updates: [TranscriptUpdate] = [TranscriptUpdate(settled: "hello there", volatile: "")],
         transcriber: FakeTranscriber? = nil,
+        startGate: Gate? = nil,
+        stopGate: Gate? = nil,
+        cancelDelay: Duration? = nil,
         refiner: FakeRefiner? = FakeRefiner(.cleaned("Hello there.")),
         keyboard: RecordingKeyboard? = nil,
         settings: Settings = .defaults,
+        readSettings: (@Sendable () async -> Settings)? = nil,
         sleep: @escaping @Sendable (Duration) async throws -> Void = { _ in
             try await Task.sleep(for: .seconds(3600))
         }
     ) {
         let journal = Journal()
         self.journal = journal
-        self.transcriber = transcriber ?? FakeTranscriber(updates: updates, journal: journal)
+        self.transcriber = transcriber ?? FakeTranscriber(
+            updates: updates, startGate: startGate, stopGate: stopGate,
+            cancelDelay: cancelDelay, journal: journal)
         self.refiner = refiner
         self.clipboard = RecordingClipboard(journal: journal)
         self.keyboard = keyboard ?? RecordingKeyboard(journal: journal)
         self.focus = FakeFocusGuard(journal: journal)
+        let clock = TickingClock()
+        self.clock = clock
 
         self.session = DictationSession(
             transcriber: self.transcriber,
@@ -139,8 +192,9 @@ private struct Harness {
             clipboard: self.clipboard,
             keyboard: self.keyboard,
             focus: self.focus,
-            settings: { settings },
-            sleep: sleep
+            settings: readSettings ?? { settings },
+            sleep: sleep,
+            now: { clock.now() }
         )
     }
 
@@ -164,7 +218,7 @@ struct DictationSessionTests {
         #expect(harness.keyboard.pasteCount == 1)
         #expect(await harness.session.currentState == .idle)
         await log.expectPhases(["idle", "recording", "settling", "refining", "delivering", "idle"])
-        #expect(harness.refiner?.calls.first?.text == "hello there")
+        #expect(harness.refiner?.calls.first?.text == "<transcript>\nhello there\n</transcript>")
     }
 
     @Test("the words show up while they are being said")
@@ -249,7 +303,7 @@ struct DictationSessionTests {
         #expect(harness.clipboard.text() == "hello there")
         #expect(harness.keyboard.pasteCount == 1)
         #expect(await harness.session.currentState == .idle)
-        await log.expectNotice(containing: "raw transcript")
+        await log.expectNotice(containing: "ham metin")
     }
 
     @Test("a cleanup that never returns is abandoned at the deadline")
@@ -267,7 +321,7 @@ struct DictationSessionTests {
 
         #expect(harness.clipboard.text() == "hello there")
         #expect(await harness.session.currentState == .idle)
-        await log.expectNotice(containing: "7s")
+        await log.expectNotice(containing: "7 saniye")
     }
 
     @Test("an empty reply is not a cleaned-up transcript", arguments: ["", "   \n"])
@@ -279,7 +333,7 @@ struct DictationSessionTests {
         await harness.session.toggle()
 
         #expect(harness.clipboard.text() == "hello there")
-        await log.expectNotice(containing: "nothing")
+        await log.expectNotice(containing: "boş")
     }
 
     @Test("the cleaned text is trimmed before it is delivered")
@@ -515,7 +569,7 @@ struct DictationSessionTests {
         await harness.session.toggle()
 
         await log.expectPhases(["idle", "failed"])
-        #expect(log.states.last == .failed(message: "Diktaf is not allowed to use the microphone."))
+        #expect(log.states.last == .failed(message: "Diktaf'ın mikrofonu kullanma izni yok."))
     }
 
     /// The microphone was unplugged. What it heard before that is still worth
@@ -569,5 +623,425 @@ struct DictationSessionTests {
             Issue.record("the first event should be the state as it is now")
         }
         await harness.session.cancel()
+    }
+
+    // MARK: - Cancelling, against an adversary
+
+    /// A cancelled consumer's stream ends as if it had finished normally. While
+    /// the transcriber takes its time winding down, that used to look like the
+    /// end of the recording, and the cancelled dictation was pasted.
+    @Test("cancelling while recording delivers nothing, however long the transcriber takes to wind down")
+    func cancelsWhileRecordingWithASlowTranscriber() async throws {
+        let harness = Harness(cancelDelay: .milliseconds(20))
+
+        await harness.session.toggle()
+        try await waitUntil("the live text arrives") {
+            if case .recording(let text, _) = await harness.session.currentState {
+                return !text.isEmpty
+            }
+            return false
+        }
+        await harness.session.cancel()
+        try await Task.sleep(for: .milliseconds(20))
+
+        #expect(harness.clipboard.text() == nil)
+        #expect(harness.keyboard.pasteCount == 0)
+        #expect(harness.transcriber.stopCount == 0)
+        #expect(await harness.session.currentState == .idle)
+    }
+
+    @Test("cancelling while settling delivers nothing")
+    func cancelsWhileSettling() async throws {
+        let gate = Gate()
+        let harness = Harness(stopGate: gate, cancelDelay: .milliseconds(20))
+
+        await harness.session.toggle()
+        let finishing = Task { await harness.session.toggle() }
+        try await waitUntil("the session reaches settling") {
+            await harness.session.currentState == .settling
+        }
+        await harness.session.cancel()
+        await gate.open()
+        await finishing.value
+
+        #expect(harness.clipboard.text() == nil)
+        #expect(harness.keyboard.pasteCount == 0)
+        #expect(await harness.session.currentState == .idle)
+    }
+
+    @Test("cancelling during cleanup delivers nothing, even when the cleanup finishes afterwards")
+    func cancelsWhileRefining() async throws {
+        let gate = Gate()
+        let harness = Harness(refiner: FakeRefiner(.held(gate, reply: "Hello there.")))
+
+        await harness.session.toggle()
+        let finishing = Task { await harness.session.toggle() }
+        try await waitUntil("the session reaches refining") {
+            await harness.session.currentState == .refining
+        }
+        await harness.session.cancel()
+        #expect(await harness.session.currentState == .idle)
+
+        await gate.open()
+        await finishing.value
+        try await Task.sleep(for: .milliseconds(20))
+
+        #expect(harness.clipboard.text() == nil)
+        #expect(harness.keyboard.pasteCount == 0)
+        #expect(await harness.session.currentState == .idle)
+    }
+
+    @Test("cancelling stops the cleanup in flight")
+    func cancelStopsTheRefiner() async throws {
+        let journal = Journal()
+        let harness = Harness(refiner: FakeRefiner(.hanging, journal: journal))
+
+        await harness.session.toggle()
+        let finishing = Task { await harness.session.toggle() }
+        try await waitUntil("the session reaches refining") {
+            await harness.session.currentState == .refining
+        }
+        await harness.session.cancel()
+
+        // Waited for before `finishing`, which never ends if the refiner was
+        // left running: the deadline in this harness never fires.
+        try await waitUntil("the refiner is cancelled") {
+            journal.all.contains("refiner.cancelled")
+        }
+        await finishing.value
+    }
+
+    /// The cleanup of a cancelled dictation can still come back while the next
+    /// one is recording. Delivered then, it pasted the old text and dropped the
+    /// new recording back to idle underneath the user.
+    @Test("a cancelled dictation's cleanup cannot clobber the next one")
+    func staleCleanupLeavesTheNextDictationAlone() async throws {
+        let gate = Gate()
+        let harness = Harness(refiner: FakeRefiner(.held(gate, reply: "Hello there.")))
+
+        await harness.session.toggle()
+        let finishing = Task { await harness.session.toggle() }
+        try await waitUntil("the session reaches refining") {
+            await harness.session.currentState == .refining
+        }
+        await harness.session.cancel()
+        await harness.session.toggle()          // the next dictation
+
+        await gate.open()                       // the first one's cleanup returns
+        await finishing.value
+        try await Task.sleep(for: .milliseconds(20))
+
+        #expect(harness.keyboard.pasteCount == 0, "the cancelled dictation was not pasted")
+        if case .recording = await harness.session.currentState {} else {
+            Issue.record("the next dictation should still be recording")
+        }
+
+        await harness.session.toggle()
+        #expect(harness.keyboard.pasteCount == 1)
+        #expect(harness.clipboard.text() == "Hello there.")
+    }
+
+    @Test("cancelling while the delivery is being prepared pastes nothing")
+    func cancelsWhileDelivering() async throws {
+        let gate = Gate()
+        // The first read is the cleanup's, the second the delivery's.
+        let settings = HeldSettings(holdingRead: 2, gate: gate)
+        let harness = Harness(readSettings: { await settings.read() })
+
+        await harness.session.toggle()
+        let finishing = Task { await harness.session.toggle() }
+        try await waitUntil("the delivery is reading the settings") { settings.reads == 2 }
+        await harness.session.cancel()
+        await gate.open()
+        await finishing.value
+
+        #expect(harness.clipboard.text() == nil)
+        #expect(harness.keyboard.pasteCount == 0)
+        #expect(await harness.session.currentState == .idle)
+    }
+
+    @Test("a new recording waits for the last one to finish cancelling")
+    func startsAfterTheCancelHasFinished() async throws {
+        let harness = Harness(cancelDelay: .milliseconds(30))
+
+        await harness.session.toggle()
+        let cancelling = Task { await harness.session.cancel() }
+        try await waitUntil("the transcriber is being cancelled") {
+            harness.transcriber.cancelCount == 1
+        }
+        await harness.session.toggle()
+        await cancelling.value
+
+        let entries = harness.journal.all
+        let cancelled = try #require(entries.firstIndex(of: "transcriber.cancelled"))
+        let restarted = try #require(entries.lastIndex(of: "transcriber.start"))
+        #expect(cancelled < restarted, "\(entries)")
+        if case .recording = await harness.session.currentState {} else {
+            Issue.record("the new dictation should be recording")
+        }
+        await harness.session.cancel()
+    }
+
+    // MARK: - While the recogniser is starting
+
+    @Test("a second press while the recogniser is starting is ignored")
+    func ignoresPressesWhileStarting() async throws {
+        let gate = Gate()
+        let harness = Harness(startGate: gate)
+        defer { Task { await gate.open() } }
+
+        let first = Task { await harness.session.toggle() }
+        try await waitUntil("the transcriber is starting") { harness.transcriber.startCount == 1 }
+        let pressed = Flag()
+        let second = Task {
+            await harness.session.toggle()
+            pressed.raise()
+        }
+        try await waitUntil("the second press is dealt with") { pressed.isRaised }
+        await gate.open()
+        await first.value
+        await second.value
+
+        #expect(harness.transcriber.startCount == 1)
+        if case .recording = await harness.session.currentState {} else {
+            Issue.record("the first press should have started a recording")
+        }
+        await harness.session.cancel()
+    }
+
+    @Test("cancelling while the recogniser is starting cancels it once it has")
+    func cancelsWhileStarting() async throws {
+        let gate = Gate()
+        let harness = Harness(startGate: gate)
+        let log = await harness.log()
+
+        let starting = Task { await harness.session.toggle() }
+        try await waitUntil("the transcriber is starting") { harness.transcriber.startCount == 1 }
+        await harness.session.cancel()
+        await gate.open()
+        await starting.value
+
+        #expect(await harness.session.currentState == .idle)
+        #expect(harness.transcriber.cancelCount == 1)
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(log.phases == ["idle"])
+        #expect(log.progress.isEmpty)
+    }
+
+    // MARK: - The deadline, against a refiner that will not stop
+
+    /// A task group cannot return until its losing child has, so a refiner that
+    /// ignores cancellation used to hold the dictation in `.refining` for as
+    /// long as it liked, deadline or no deadline.
+    @Test("a cleanup that ignores cancellation is still abandoned at the deadline")
+    func abandonsARefinerThatWillNotStop() async throws {
+        let gate = Gate()
+        defer { Task { await gate.open() } }
+        var settings = Settings.defaults
+        settings.refinerTimeoutSeconds = 3
+        let harness = Harness(refiner: FakeRefiner(.held(gate, reply: "Too late.")),
+                              settings: settings, sleep: { _ in await Task.yield() })
+
+        await harness.session.toggle()
+        let finishing = Task { await harness.session.toggle() }
+        try await waitUntil("the raw transcript is delivered at the deadline") {
+            harness.keyboard.pasteCount == 1
+        }
+
+        #expect(harness.clipboard.text() == "hello there")
+        #expect(await harness.session.currentState == .idle)
+        await gate.open()
+        await finishing.value
+    }
+
+    // MARK: - Progress
+
+    @Test("a cleaned-up dictation reports every step, each before the state it leads to")
+    func reportsProgressWithCleanup() async throws {
+        let harness = Harness()
+        let log = await harness.log()
+        let clock = harness.clock
+
+        await harness.session.toggle()
+        await harness.session.toggle()
+
+        await log.expectProgress(steps(
+            DictationProgress(destination: .insertion, startedAt: clock.at(0)),
+            { $0.recordingEndedAt = clock.at(1) },
+            {
+                $0.transcriptReadyAt = clock.at(2)
+                $0.rawTranscript = "hello there"
+            },
+            {
+                $0.cleanup = CleanupProgress(engine: .ollama, startedAt: clock.at(3),
+                                             deadlineSeconds: 20, outcome: .running)
+            },
+            { $0.cleanup?.outcome = .cleaned("Hello there.", finishedAt: clock.at(4)) },
+            { $0.delivery = .paste },
+            { $0.deliveredAt = clock.at(5) }
+        ))
+        await log.expectTimeline([
+            "idle", "progress", "recording", "progress", "settling", "progress",
+            "progress", "refining", "progress", "progress", "delivering", "progress", "idle",
+        ])
+    }
+
+    @Test("with cleanup off the progress says it was skipped and why")
+    func reportsProgressWithCleanupOff() async throws {
+        var settings = Settings.defaults
+        settings.cleanupEnabled = false
+        settings.cleanupEngine = .claude
+        settings.delivery = .type
+        let harness = Harness(settings: settings)
+        let log = await harness.log()
+        let clock = harness.clock
+
+        await harness.session.toggle()
+        await harness.session.toggle()
+
+        await log.expectProgress(steps(
+            DictationProgress(destination: .insertion, startedAt: clock.at(0)),
+            { $0.recordingEndedAt = clock.at(1) },
+            {
+                $0.transcriptReadyAt = clock.at(2)
+                $0.rawTranscript = "hello there"
+            },
+            {
+                $0.cleanup = CleanupProgress(engine: .claude, startedAt: clock.at(3),
+                                             deadlineSeconds: 20, outcome: .skipped(.disabled))
+            },
+            { $0.delivery = .type },
+            { $0.deliveredAt = clock.at(4) }
+        ))
+        await log.expectTimeline([
+            "idle", "progress", "recording", "progress", "settling", "progress",
+            "progress", "progress", "delivering", "progress", "idle",
+        ])
+    }
+
+    @Test("a skipped cleanup says which thing was missing", arguments: [false, true])
+    func reportsWhyCleanupWasSkipped(_ hasRefiner: Bool) async throws {
+        var settings = Settings.defaults
+        settings.rules = CleanupRuleSet()
+        let harness = Harness(refiner: hasRefiner ? FakeRefiner(.cleaned("x")) : nil,
+                              settings: settings)
+        let log = await harness.log()
+
+        await harness.session.toggle()
+        await harness.session.toggle()
+
+        try await waitUntil("the dictation is delivered") { log.progress.last?.deliveredAt != nil }
+        #expect(log.progress.last?.cleanup?.outcome == .skipped(hasRefiner ? .noRules : .noRefiner))
+    }
+
+    @Test("a cleanup that times out reports the fallback and still says so in a notice")
+    func reportsProgressWhenCleanupTimesOut() async throws {
+        var settings = Settings.defaults
+        settings.refinerTimeoutSeconds = 7
+        let harness = Harness(refiner: FakeRefiner(.hanging), settings: settings,
+                              sleep: { _ in await Task.yield() })
+        let log = await harness.log()
+        let clock = harness.clock
+
+        await harness.session.toggle()
+        await harness.session.toggle()
+
+        await log.expectProgress(steps(
+            DictationProgress(destination: .insertion, startedAt: clock.at(0)),
+            { $0.recordingEndedAt = clock.at(1) },
+            {
+                $0.transcriptReadyAt = clock.at(2)
+                $0.rawTranscript = "hello there"
+            },
+            {
+                $0.cleanup = CleanupProgress(engine: .ollama, startedAt: clock.at(3),
+                                             deadlineSeconds: 7, outcome: .running)
+            },
+            {
+                $0.cleanup?.outcome = .fellBack(reason: "Temizleme 7 saniyeden uzun sürdü",
+                                                finishedAt: clock.at(4))
+            },
+            { $0.delivery = .paste },
+            { $0.deliveredAt = clock.at(5) }
+        ))
+        await log.expectTimeline([
+            "idle", "progress", "recording", "progress", "settling", "progress",
+            "progress", "refining", "progress", "notice", "progress", "delivering",
+            "progress", "idle",
+        ])
+        #expect(log.notices == ["Temizleme 7 saniyeden uzun sürdü, bu yüzden ham metin kullanıldı."])
+    }
+
+    @Test("a dictation for the agent reports progress as far as the transcript")
+    func reportsProgressForTheAgent() async throws {
+        let harness = Harness()
+        let log = await harness.log()
+        let clock = harness.clock
+
+        await harness.session.toggle(destination: .agent)
+        await harness.session.toggle()
+
+        await log.expectProgress(steps(
+            DictationProgress(destination: .agent, startedAt: clock.at(0)),
+            { $0.recordingEndedAt = clock.at(1) },
+            {
+                $0.transcriptReadyAt = clock.at(2)
+                $0.rawTranscript = "hello there"
+            }
+        ))
+        await log.expectTimeline([
+            "idle", "progress", "recording", "progress", "settling", "progress",
+            "agentPrompt", "idle",
+        ])
+    }
+
+    @Test("nothing more is reported about a dictation once it is cancelled")
+    func reportsNothingAfterCancel() async throws {
+        let gate = Gate()
+        let harness = Harness(refiner: FakeRefiner(.held(gate, reply: "Hello there.")))
+        let log = await harness.log()
+        let clock = harness.clock
+
+        await harness.session.toggle()
+        let finishing = Task { await harness.session.toggle() }
+        try await waitUntil("the session reaches refining") {
+            await harness.session.currentState == .refining
+        }
+        await harness.session.cancel()
+        await gate.open()
+        await finishing.value
+        try await Task.sleep(for: .milliseconds(20))
+
+        await log.expectProgress(steps(
+            DictationProgress(destination: .insertion, startedAt: clock.at(0)),
+            { $0.recordingEndedAt = clock.at(1) },
+            {
+                $0.transcriptReadyAt = clock.at(2)
+                $0.rawTranscript = "hello there"
+            },
+            {
+                $0.cleanup = CleanupProgress(engine: .ollama, startedAt: clock.at(3),
+                                             deadlineSeconds: 20, outcome: .running)
+            }
+        ))
+        await log.expectTimeline([
+            "idle", "progress", "recording", "progress", "settling", "progress",
+            "progress", "refining", "idle",
+        ])
+    }
+
+    /// Each change applied to the step before it, which is how the session
+    /// builds them.
+    private func steps(
+        _ first: DictationProgress,
+        _ changes: (inout DictationProgress) -> Void...
+    ) -> [DictationProgress] {
+        var all = [first]
+        for change in changes {
+            var next = all[all.count - 1]
+            change(&next)
+            all.append(next)
+        }
+        return all
     }
 }
