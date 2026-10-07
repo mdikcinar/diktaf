@@ -57,8 +57,8 @@ download costs:
 
 | Model | Download |
 | --- | --- |
+| Whisper large-v3-turbo, full precision (recommended) | 1639 MB |
 | Whisper large-v3-turbo | 646 MB |
-| Whisper large-v3-turbo, full precision | 1639 MB |
 | Whisper small | 217 MB |
 
 The weights land in `~/Library/Application Support/Diktaf/WhisperModels` and a
