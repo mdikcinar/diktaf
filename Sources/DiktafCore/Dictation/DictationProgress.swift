@@ -78,8 +78,8 @@ public struct CleanupProgress: Sendable, Equatable {
     public enum SkipReason: String, Sendable, Equatable {
         /// Cleanup is switched off.
         case disabled
-        /// No rule and no extra instruction is in force, so there is nothing to ask for.
-        case noRules
+        /// The prompt is empty, so there is nothing to ask for.
+        case noPrompt
         /// There is no agent to ask.
         case noRefiner
     }

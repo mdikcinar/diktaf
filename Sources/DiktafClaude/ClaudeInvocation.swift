@@ -37,7 +37,7 @@ struct ClaudeInvocation: Sendable, Equatable {
         case .cleanup(let instruction):
             arguments += [
                 // Replaces the default system prompt rather than adding to it:
-                // the rules are the whole of the job here.
+                // the user's prompt is the whole of the job here.
                 "--system-prompt", instruction,
                 // Nothing to resume, so nothing worth writing to disk. It also
                 // keeps a user's session list from filling up with one entry per

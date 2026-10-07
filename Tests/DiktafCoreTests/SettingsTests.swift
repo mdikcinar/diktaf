@@ -10,7 +10,7 @@ struct SettingsTests {
         var original = Settings.defaults
         original.language = "tr-TR"
         original.delivery = .type
-        original.rules.extraInstruction = "keep it short"
+        original.cleanupPrompt = "Keep it short."
         original.cleanupEngine = .claude
         original.ollamaModel = "qwen2.5:7b"
         original.silenceStopEnabled = false
@@ -32,7 +32,7 @@ struct SettingsTests {
 
         #expect(decoded.cleanupEnabled == false)
         #expect(decoded.delivery == Settings.defaults.delivery)
-        #expect(decoded.rules == Settings.defaults.rules)
+        #expect(decoded.cleanupPrompt == Settings.defaults.cleanupPrompt)
         #expect(decoded.bindings == Settings.defaults.bindings)
         #expect(decoded.silenceStopEnabled == Settings.defaults.silenceStopEnabled)
         #expect(decoded.silenceStopSeconds == Settings.defaults.silenceStopSeconds)
@@ -78,29 +78,23 @@ struct SettingsTests {
         #expect(decoded.agentModel == nil)
     }
 
-    @Test("a rule written by hand needs only its sentence")
-    func readsRulesWithoutIdentifiers() throws {
-        let file = Data(#"{"rules":{"rules":[{"text":"Keep it short."}]}}"#.utf8)
+    /// The rules and the extra instruction were the prompt before there was one
+    /// field for it. A file that still has them loads with the shipped prompt,
+    /// like any other key this version does not know.
+    @Test("a file with the old rules loads with the recommended prompt")
+    func ignoresTheOldRules() throws {
+        let file = Data(#"{"rules":{"rules":[{"text":"Keep it short."}]},"cleanupEnabled":false}"#.utf8)
 
         let decoded = try JSONDecoder().decode(Settings.self, from: file)
 
-        #expect(decoded.rules.rules.map(\.text) == ["Keep it short."])
-        #expect(decoded.rules.rules.first?.isEnabled == true)
+        #expect(decoded.cleanupPrompt == CleanupInstruction.recommendedPrompt)
+        #expect(decoded.cleanupEnabled == false)
     }
 
-    @Test("a rule or a shortcut that cannot be read is dropped and the rest kept")
+    @Test("a shortcut that cannot be read is dropped and the rest kept")
     func dropsUnreadableElements() throws {
         let file = Data(#"""
         {
-          "rules": {
-            "rules": [
-              {"text": "First."},
-              {"isEnabled": true},
-              {"text": 5},
-              {"text": "Second.", "isEnabled": false, "id": "not a uuid"}
-            ],
-            "extraInstruction": "Also this."
-          },
           "bindings": [
             {"action": "toggle", "combination": {"key": "f13", "modifiers": 0}},
             {"action": "teleport", "combination": {"key": "t", "modifiers": 1}},
@@ -111,21 +105,18 @@ struct SettingsTests {
 
         let decoded = try JSONDecoder().decode(Settings.self, from: file)
 
-        #expect(decoded.rules.rules.map(\.text) == ["First.", "Second."])
-        #expect(decoded.rules.rules.map(\.isEnabled) == [true, false])
-        #expect(decoded.rules.extraInstruction == "Also this.")
         #expect(decoded.bindings == [
             HotkeyBinding(action: .toggle, combination: KeyCombination(key: "f13", modifiers: [])),
         ])
     }
 
-    @Test("rules or shortcuts that are not a list at all fall back to the defaults")
-    func replacesUnreadableLists() throws {
-        let file = Data(#"{"rules":{"rules":"tidy it up"},"bindings":"none"}"#.utf8)
+    @Test("a prompt that is not text, or shortcuts that are not a list, fall back to the defaults")
+    func replacesUnreadableValues() throws {
+        let file = Data(#"{"cleanupPrompt":["tidy it up"],"bindings":"none"}"#.utf8)
 
         let decoded = try JSONDecoder().decode(Settings.self, from: file)
 
-        #expect(decoded.rules == Settings.defaults.rules)
+        #expect(decoded.cleanupPrompt == Settings.defaults.cleanupPrompt)
         #expect(decoded.bindings == Settings.defaults.bindings)
     }
 

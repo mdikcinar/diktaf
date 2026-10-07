@@ -1,7 +1,7 @@
 # Diktaf
 
 Press a key, talk, press it again. A recogniser on this Mac turns the recording
-into text, a local model cleans it up by rules you wrote, and the result
+into text, a local model cleans it up by a prompt you wrote, and the result
 lands in your clipboard and is pasted into whatever window you were typing in.
 
 No API keys, and nothing leaves the machine. Two recognisers to choose between,
@@ -29,9 +29,9 @@ in Settings.
 **Dictation.** The recogniser runs on this Mac either way. The indicator shows
 the text arriving so you can see it is hearing you.
 
-**Cleanup rules.** Rules are your own sentences — *drop the filler words*, *keep
-my wording*, *no markdown* — each one switchable, plus a free-form instruction
-for anything else. They become the prompt handed to the local agent. Cleanup can
+**Cleanup prompt.** One text field holds the whole prompt handed to the local
+agent — *drop the filler words*, *keep my wording*, *no markdown*, and whatever
+else you add. Diktaf adds only the dictation language to it. Cleanup can
 be switched off, in which case the raw transcript is pasted. If the agent fails
 or takes too long, the raw transcript is pasted anyway: a dictation that arrives
 uncleaned beats one that disappears.

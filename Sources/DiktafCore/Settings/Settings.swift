@@ -20,7 +20,7 @@ public enum DeliveryMode: String, Codable, Sendable, CaseIterable {
 /// That is the only kind of migration this needs, and it keeps working without
 /// anybody remembering to write one. A value that is there but cannot be read —
 /// a typo in an enum, a string where a number goes — costs only that key, and a
-/// shortcut or rule that cannot be read costs only itself.
+/// shortcut that cannot be read costs only itself.
 public struct Settings: Codable, Sendable, Equatable {
     /// BCP-47, as in "tr-TR". Nil follows whatever the system is set to.
     public var language: String?
@@ -44,7 +44,10 @@ public struct Settings: Codable, Sendable, Equatable {
     /// Which agent does the cleaning up.
     public var cleanupEngine: CleanupEngine
 
-    public var rules: CleanupRuleSet
+    /// The whole prompt the cleanup is given, in the user's own words. Only the
+    /// language is added to it, by `CleanupInstruction`.
+    public var cleanupPrompt: String
+
     public var delivery: DeliveryMode
     public var bindings: [HotkeyBinding]
 
@@ -94,7 +97,7 @@ public struct Settings: Codable, Sendable, Equatable {
         whisperModel: String? = nil,
         cleanupEnabled: Bool = true,
         cleanupEngine: CleanupEngine = .ollama,
-        rules: CleanupRuleSet = .recommended,
+        cleanupPrompt: String = CleanupInstruction.recommendedPrompt,
         delivery: DeliveryMode = .paste,
         bindings: [HotkeyBinding] = Settings.defaultBindings,
         agentEnabled: Bool = true,
@@ -111,7 +114,7 @@ public struct Settings: Codable, Sendable, Equatable {
         self.whisperModel = whisperModel
         self.cleanupEnabled = cleanupEnabled
         self.cleanupEngine = cleanupEngine
-        self.rules = rules
+        self.cleanupPrompt = cleanupPrompt
         self.delivery = delivery
         self.bindings = bindings
         self.agentEnabled = agentEnabled
@@ -145,7 +148,7 @@ public struct Settings: Codable, Sendable, Equatable {
     // MARK: - Codable
 
     private enum CodingKeys: String, CodingKey {
-        case language, engine, whisperModel, cleanupEnabled, cleanupEngine, rules
+        case language, engine, whisperModel, cleanupEnabled, cleanupEngine, cleanupPrompt
         case delivery, bindings, agentEnabled, showOverlay, refinerTimeoutSeconds
         case silenceStopEnabled, silenceStopSeconds
         case cleanupModel, ollamaModel, agentModel
@@ -165,8 +168,8 @@ public struct Settings: Codable, Sendable, Equatable {
             ?? fallback.cleanupEnabled
         cleanupEngine = (try? box.decodeIfPresent(CleanupEngine.self, forKey: .cleanupEngine))
             ?? fallback.cleanupEngine
-        rules = (try? box.decodeIfPresent(CleanupRuleSet.self, forKey: .rules))
-            ?? fallback.rules
+        cleanupPrompt = (try? box.decodeIfPresent(String.self, forKey: .cleanupPrompt))
+            ?? fallback.cleanupPrompt
         delivery = (try? box.decodeIfPresent(DeliveryMode.self, forKey: .delivery))
             ?? fallback.delivery
         bindings = (try? box.decodeIfPresent([Forgiving<HotkeyBinding>].self, forKey: .bindings))?

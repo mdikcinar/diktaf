@@ -386,34 +386,24 @@ private struct CleanupTab: View {
                     .font(.caption)
             }
 
-            Section("Kurallar") {
-                ForEach(model.settings.rules.rules) { rule in
-                    RuleRow(model: model, rule: rule)
-                }
-                Button("Kural ekle", systemImage: "plus") {
-                    model.update { $0.rules.rules.append(CleanupRule(text: "")) }
-                }
-            }
-
-            Section("Ek talimat") {
-                CommittingTextField(
-                    placeholder: "Yukarıdaki kuralların kapsamadığı her şey",
-                    value: model.settings.rules.extraInstruction ?? "",
-                    axis: .vertical
-                ) { edited in
-                    let trimmed = edited.trimmingCharacters(in: .whitespacesAndNewlines)
-                    model.update { $0.rules.extraInstruction = trimmed.isEmpty ? nil : trimmed }
-                }
-                .lineLimit(3...)
-                Text("Serbest metin. Sürekli yanlış duyduğu bir ad, bir yazım üslubu, kaçınılacak bir kelime.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
             Section {
-                Button("Önerilen kuralları geri yükle") {
-                    model.update { $0.rules = .recommended }
+                CommittingTextEditor(value: model.settings.cleanupPrompt) { edited in
+                    model.update { $0.cleanupPrompt = edited }
                 }
+                .font(.body.monospaced())
+                .frame(minHeight: 260)
+                Button("Önerilen talimatı geri yükle") {
+                    model.update { $0.cleanupPrompt = CleanupInstruction.recommendedPrompt }
+                }
+                .disabled(model.settings.cleanupPrompt == CleanupInstruction.recommendedPrompt)
+            } header: {
+                Text("Talimat")
+            } footer: {
+                Text("Modele gönderilen talimatın tamamı. Diktaf yalnızca dil satırını "
+                     + "ekler, Genel'deki dikte diline göre. Metin modele <transcript> "
+                     + "etiketleri arasında gider; o kısmı silerseniz model soruları "
+                     + "temizlemek yerine yanıtlamaya başlayabilir.")
+                    .font(.caption)
             }
         }
         .formStyle(.grouped)
@@ -519,48 +509,6 @@ private struct OllamaStateRow: View {
 
     private var pullCommand: String {
         "ollama pull \(model.chosenOllamaModel)"
-    }
-}
-
-private struct RuleRow: View {
-    let model: AppModel
-    let rule: CleanupRule
-
-    var body: some View {
-        HStack(alignment: .top) {
-            Toggle("", isOn: Binding(
-                get: { rule.isEnabled },
-                set: { value in
-                    model.update { settings in
-                        guard let index = settings.rules.rules
-                            .firstIndex(where: { $0.id == rule.id }) else { return }
-                        settings.rules.rules[index].isEnabled = value
-                    }
-                }))
-            .labelsHidden()
-
-            CommittingTextField(
-                placeholder: "Ne yapılsın",
-                value: rule.text,
-                axis: .vertical
-            ) { edited in
-                model.update { settings in
-                    guard let index = settings.rules.rules
-                        .firstIndex(where: { $0.id == rule.id }) else { return }
-                    settings.rules.rules[index].text = edited
-                }
-            }
-            .textFieldStyle(.plain)
-
-            Button(role: .destructive) {
-                model.update { settings in
-                    settings.rules.rules.removeAll { $0.id == rule.id }
-                }
-            } label: {
-                Image(systemName: "trash")
-            }
-            .buttonStyle(.borderless)
-        }
     }
 }
 

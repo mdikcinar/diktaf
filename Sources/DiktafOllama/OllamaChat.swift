@@ -25,7 +25,7 @@ struct OllamaChatRequest: Encodable, Sendable, Equatable {
     let keep_alive: String
     let options: Options
 
-    /// The rules as the system message and the transcript as the user's, with no
+    /// The instruction as the system message and the transcript as the user's, with no
     /// randomness: the same dictation should come back the same way twice.
     static func cleanup(model: String, instruction: String, text: String) -> OllamaChatRequest {
         OllamaChatRequest(

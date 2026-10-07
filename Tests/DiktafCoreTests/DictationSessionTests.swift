@@ -265,10 +265,10 @@ struct DictationSessionTests {
         await log.expectPhases(["idle", "recording", "settling", "delivering", "idle"])
     }
 
-    @Test("with no rules left there is nothing to ask for")
-    func skipsCleanupWithoutRules() async throws {
+    @Test("with the prompt emptied there is nothing to ask for")
+    func skipsCleanupWithoutAPrompt() async throws {
         var settings = Settings.defaults
-        settings.rules = CleanupRuleSet()
+        settings.cleanupPrompt = "  \n "
         let harness = Harness(settings: settings)
 
         await harness.session.toggle()
@@ -346,7 +346,7 @@ struct DictationSessionTests {
         #expect(harness.clipboard.text() == "Hello there.")
     }
 
-    @Test("the instruction handed over is the one the rules build")
+    @Test("the instruction handed over is the one the prompt builds")
     func passesTheBuiltInstruction() async throws {
         var settings = Settings.defaults
         settings.language = "tr-TR"
@@ -356,7 +356,7 @@ struct DictationSessionTests {
         await harness.session.toggle()
 
         let instruction = try #require(harness.refiner?.calls.first?.instruction)
-        #expect(instruction == settings.rules.instruction(language: "tr-TR"))
+        #expect(instruction == CleanupInstruction.build(prompt: settings.cleanupPrompt, language: "tr-TR"))
         #expect(instruction.contains("tr-TR"))
     }
 
@@ -922,7 +922,7 @@ struct DictationSessionTests {
     @Test("a skipped cleanup says which thing was missing", arguments: [false, true])
     func reportsWhyCleanupWasSkipped(_ hasRefiner: Bool) async throws {
         var settings = Settings.defaults
-        settings.rules = CleanupRuleSet()
+        settings.cleanupPrompt = ""
         let harness = Harness(refiner: hasRefiner ? FakeRefiner(.cleaned("x")) : nil,
                               settings: settings)
         let log = await harness.log()
@@ -931,7 +931,7 @@ struct DictationSessionTests {
         await harness.session.toggle()
 
         try await waitUntil("the dictation is delivered") { log.progress.last?.deliveredAt != nil }
-        #expect(log.progress.last?.cleanup?.outcome == .skipped(hasRefiner ? .noRules : .noRefiner))
+        #expect(log.progress.last?.cleanup?.outcome == .skipped(hasRefiner ? .noPrompt : .noRefiner))
     }
 
     @Test("a cleanup that times out reports the fallback and still says so in a notice")

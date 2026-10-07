@@ -2,7 +2,7 @@ import Foundation
 
 /// Turns a raw transcript into the text a person meant to write.
 ///
-/// The port takes a finished instruction rather than the rules themselves, so
+/// The port takes a finished instruction rather than the settings it came from, so
 /// that building the instruction stays here, in the domain, where it can be
 /// tested without starting a process — and so that the adapter has exactly one
 /// job: hand two strings to an agent and return what comes back.

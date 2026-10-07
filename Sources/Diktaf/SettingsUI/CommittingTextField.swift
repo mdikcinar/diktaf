@@ -39,7 +39,7 @@ struct CommittingTextField: View {
             .onChange(of: isFocused) { _, focused in
                 if !focused { onCommit(text) }
             }
-            // Changed from somewhere else — the rules put back to their defaults,
+            // Changed from somewhere else — the settings put back to their defaults,
             // say. Taken only while the user is not in the middle of typing, so
             // this can never be what overwrites what they are writing.
             .onChange(of: value) { _, latest in

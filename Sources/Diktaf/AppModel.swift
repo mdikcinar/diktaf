@@ -11,7 +11,7 @@ import Observation
 /// which port.
 ///
 /// Also the one object the interface talks to. It holds no rules of its own: the
-/// flow belongs to `DictationSession`, the prompt to `CleanupRuleSet`, the
+/// flow belongs to `DictationSession`, the prompt to `CleanupInstruction`, the
 /// conversation to `AgentConversation`. What is here is wiring, and the mirror of
 /// the session's state that SwiftUI can observe.
 @MainActor

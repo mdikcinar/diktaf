@@ -2,7 +2,7 @@
 
 Diktaf is a menu bar dictation app for macOS. Press a key, talk, press it
 again: the recording is turned into text by a speech recogniser running on this
-Mac, a local model cleans it up according to rules you wrote, and the
+Mac, a local model cleans it up according to a prompt you wrote, and the
 result lands in your clipboard and is pasted into whatever window you were
 typing in. A second key sends what you said to the agent as a question instead.
 
@@ -58,7 +58,7 @@ them, and if one is genuinely wrong, say so rather than working around it.
 
 | Target | Holds | May import |
 | --- | --- | --- |
-| `DiktafCore` | domain, ports, state machine, rules, prompt building | Foundation |
+| `DiktafCore` | domain, ports, state machine, prompt building | Foundation |
 | `DiktafMac` | `SpeechAnalyzer`, `NSPasteboard`, `CGEvent`, hotkeys, permissions | Foundation, AppKit, Speech, AVFoundation, Carbon, DiktafCore |
 | `DiktafWhisper` | Whisper as Core ML: the model catalogue and the download | Foundation, WhisperKit, DiktafCore |
 | `DiktafClaude` | the `claude` CLI as a subprocess | Foundation, DiktafCore |
@@ -94,11 +94,13 @@ put the app into a state; the UI observes and the hotkeys ask.
   pastes or types it.
 * **cancel** is reachable from everywhere and always ends at idle.
 
-### Cleanup rules
+### Cleanup prompt
 
-Rules are the user's own sentences, each switchable, plus an optional free-form
-instruction. The domain turns them into the prompt; the refiner never sees a
-rule. Prompt building is ordinary testable code and must stay that way.
+The prompt is one piece of text the user edits whole, starting from the one
+Diktaf ships. The domain adds the dictation language to it and encloses the
+transcript in the tags the shipped prompt describes; the refiner is handed the
+finished instruction. Prompt building is ordinary testable code and must stay
+that way.
 
 ### Agent
 
