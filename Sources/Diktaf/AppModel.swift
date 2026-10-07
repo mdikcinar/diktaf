@@ -550,7 +550,23 @@ final class AppModel {
 
     // MARK: - Shortcuts
 
+    /// How many shortcut fields are waiting for a key. The keys are let go while
+    /// any is: Carbon hands a registered combination to its action before the
+    /// field ever sees it, so pressing the dictation key there started one.
+    private var shortcutsBeingRecorded = 0
+
+    func beginRecordingShortcut() {
+        shortcutsBeingRecorded += 1
+        hotkeys.unbindAll()
+    }
+
+    func endRecordingShortcut() {
+        shortcutsBeingRecorded = max(0, shortcutsBeingRecorded - 1)
+        registerShortcuts()
+    }
+
     private func registerShortcuts() {
+        guard shortcutsBeingRecorded == 0 else { return }
         let wanted = settings.bindings.filter { binding in
             // The agent key is not registered while the feature is off, so that
             // the combination is free for whatever else wants it.

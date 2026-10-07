@@ -584,6 +584,10 @@ private struct ShortcutsTab: View {
                                         HotkeyBinding(action: action, combination: chosen))
                                 }
                             }
+                        } onRecordingChange: { isRecording in
+                            isRecording
+                                ? model.beginRecordingShortcut()
+                                : model.endRecordingShortcut()
                         }
                     }
                 }
