@@ -343,7 +343,7 @@ private struct CleanupTab: View {
             Section {
                 Toggle("Dikte ettiğimi temizle", isOn: enabledBinding)
                 Text("""
-                Duyulan metin, aşağıdaki kurallar uygulansın diye temizleme \
+                Duyulan metin, aşağıdaki talimatla birlikte temizleme \
                 motoruna gider; yapıştırılan onun sonucudur. Konuşmayı metne \
                 çeviren o değil, ses tanıyıcıdır. Kapalıyken ham metin olduğu \
                 gibi yapıştırılır; temizleme başarısız olur ya da çok uzun \
