@@ -392,8 +392,10 @@ final class AppModel {
         meter = Task { [weak self, transcriber] in
             var silence = SilenceDetector()
             var stopped = false
+            var heardCharacters = 0
             while !Task.isCancelled {
                 let level = await transcriber.inputLevel()
+                let decibels = await transcriber.inputDecibels()
                 let seconds = await transcriber.recordedSeconds()
                 let load = await transcriber.whisperLoadState()
                 guard let self, !Task.isCancelled else { return }
@@ -407,12 +409,18 @@ final class AppModel {
                 if self.hearsNothing != silent { self.hearsNothing = silent }
 
                 let now = Date()
-                silence.observe(level: level, at: now)
+                if case .recording(let text, _) = self.state, text.count > heardCharacters {
+                    heardCharacters = text.count
+                    silence.heardWords()
+                }
+                silence.observe(decibels: decibels, at: now)
                 if self.silenceSince != silence.quietSince { self.silenceSince = silence.quietSince }
                 if !stopped, self.settings.silenceStopEnabled,
                    let quiet = silence.quiet(at: now), quiet >= self.silenceStopDelay {
                     stopped = true
-                    Diagnostics.event(String(format: "stopping after %.1fs of quiet", quiet))
+                    Diagnostics.event(String(
+                        format: "stopping after %.1fs of quiet, room at %.0f dBFS",
+                        quiet, silence.room ?? -.infinity))
                     self.finishOnSilence()
                 }
                 try? await Task.sleep(for: .milliseconds(50))
