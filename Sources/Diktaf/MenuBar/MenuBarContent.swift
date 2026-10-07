@@ -66,10 +66,19 @@ struct MenuBarContent: View {
 
 extension MenuBarContent {
     /// An accessory application's windows open behind whatever is in front
-    /// unless it is brought forward first.
+    /// unless it is brought forward first — and one already open stays behind
+    /// when opened again, so it is ordered to the front by hand.
     fileprivate func showSettings() {
         openSettings()
         NSApplication.shared.activate()
+        Task { @MainActor in
+            // SwiftUI's own name for the window its `Settings` scene makes.
+            let window = NSApplication.shared.windows.first {
+                $0.identifier?.rawValue == "com_apple_SwiftUI_Settings_window"
+            }
+            window?.makeKeyAndOrderFront(nil)
+            window?.orderFrontRegardless()
+        }
     }
 }
 
