@@ -181,6 +181,13 @@ public actor WhisperTranscriber: Transcriber {
         recording ? live?.level ?? 0 : 0
     }
 
+    /// The same, unscaled and unsmoothed: the last buffer's RMS in dBFS, and −∞
+    /// when nothing is being recorded. For telling speech from the room, which
+    /// the meter's floor would hide at a low input volume.
+    public func inputDecibels() -> Float {
+        recording ? live?.decibels ?? -.infinity : -.infinity
+    }
+
     /// How much has been recorded so far in this dictation, and 0 when nothing
     /// is being recorded.
     public func recordedSeconds() -> Double {
@@ -500,6 +507,7 @@ final class LiveRecording: Sendable {
         var recent: [Float] = []
         var count = 0
         var level: Float = 0
+        var decibels = -Float.infinity
     }
 
     private let contents = Mutex(Contents())
@@ -519,7 +527,8 @@ final class LiveRecording: Sendable {
     }
 
     func append(_ samples: [Float]) {
-        let level = Self.level(ofRMS: AudioProcessor.calculateAverageEnergy(of: samples))
+        let rms = AudioProcessor.calculateAverageEnergy(of: samples)
+        let level = Self.level(ofRMS: rms)
         contents.withLock { contents in
             contents.recent.append(contentsOf: samples)
             // Trimmed a window at a time rather than every buffer, so the copy
@@ -529,6 +538,7 @@ final class LiveRecording: Sendable {
             }
             contents.count += samples.count
             contents.level = max(level, contents.level * Self.meterDecay)
+            contents.decibels = 20 * log10(rms)
         }
     }
 
@@ -539,6 +549,8 @@ final class LiveRecording: Sendable {
     var sampleCount: Int { contents.withLock { $0.count } }
 
     var level: Float { contents.withLock { $0.level } }
+
+    var decibels: Float { contents.withLock { $0.decibels } }
 
     /// An RMS level as a meter reading: 0 at `meterFloor` and below, 1 at
     /// `meterCeiling` and above, in proportion to the decibels in between.

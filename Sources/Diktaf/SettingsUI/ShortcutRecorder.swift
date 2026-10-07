@@ -17,6 +17,7 @@ import SwiftUI
 struct ShortcutRecorder: View {
     let combination: KeyCombination?
     let onChange: (KeyCombination?) -> Void
+    let onRecordingChange: (Bool) -> Void
 
     @State private var isRecording = false
     @State private var monitor: Any?
@@ -66,6 +67,7 @@ struct ShortcutRecorder: View {
     private func startRecording() {
         guard monitor == nil else { return }
         isRecording = true
+        onRecordingChange(true)
 
         monitor = NSEvent.addLocalMonitorForEvents(
             matching: [.keyDown, .otherMouseDown]
@@ -88,9 +90,11 @@ struct ShortcutRecorder: View {
     }
 
     private func stopRecording() {
+        guard isRecording else { return }
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
         isRecording = false
+        onRecordingChange(false)
     }
 
     private func handle(keyDown event: NSEvent) {

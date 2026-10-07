@@ -1,0 +1,158 @@
+/* Shared look for the README mockups: macOS 26, dark appearance. */
+:root {
+  --desk-1: #2c3440;
+  --desk-2: #171a20;
+  --window: #1f2023;
+  --group: #2a2b2f;
+  --row-line: rgba(255, 255, 255, 0.07);
+  --label: rgba(255, 255, 255, 0.88);
+  --secondary: rgba(255, 255, 255, 0.55);
+  --tertiary: rgba(255, 255, 255, 0.28);
+  --accent: #0a84ff;
+  --orange: #ff9f0a;
+  --green: #30d158;
+  --red: #ff453a;
+  --control: rgba(255, 255, 255, 0.10);
+  --control-line: rgba(255, 255, 255, 0.12);
+  --menu: rgba(44, 45, 49, 0.96);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; background: transparent; }
+body {
+  font: 13px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  color: var(--label);
+  -webkit-font-smoothing: antialiased;
+}
+.mono { font-family: "SF Mono", ui-monospace, Menlo, monospace; }
+
+/* The desktop the window sits on; the renderer crops to it. */
+.stage {
+  display: inline-block;
+  padding: 36px 44px 48px;
+  background: radial-gradient(120% 140% at 20% 0%, var(--desk-1), var(--desk-2));
+}
+
+/* Windows */
+.window {
+  background: var(--window);
+  border-radius: 16px;
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+.titlebar {
+  position: relative;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: var(--label);
+}
+.lights { position: absolute; left: 16px; top: 14px; display: flex; gap: 8px; }
+.lights i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+.lights i:nth-child(1) { background: #ff5f57; }
+.lights i:nth-child(2) { background: #febc2e; }
+.lights i:nth-child(3) { background: #28c840; }
+
+/* Settings toolbar: icon above label, the selected one tinted. */
+.tabs { display: flex; justify-content: center; gap: 6px; padding: 2px 0 10px; }
+.tab {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  min-width: 74px; padding: 6px 10px 5px; border-radius: 8px;
+  color: var(--secondary); font-size: 11px;
+}
+.tab svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+.tab.selected { background: rgba(255, 255, 255, 0.09); color: var(--accent); }
+
+/* Grouped form */
+.form { padding: 6px 24px 22px; }
+.section-header { font-weight: 600; font-size: 13px; margin: 18px 4px 8px; }
+.group { background: var(--group); border-radius: 12px; }
+.row {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  min-height: 40px; padding: 8px 14px;
+}
+.row + .row { border-top: 0.5px solid var(--row-line); }
+.row .value { color: var(--secondary); }
+.footer { color: var(--secondary); font-size: 11px; margin: 8px 4px 0; line-height: 1.4; }
+.secondary { color: var(--secondary); }
+.caption { font-size: 11px; color: var(--secondary); }
+
+/* Controls */
+.toggle {
+  width: 40px; height: 23px; border-radius: 12px; background: rgba(255, 255, 255, 0.16);
+  position: relative; flex: none;
+}
+.toggle::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 19px; height: 19px;
+  border-radius: 50%; background: #e9e9ea; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+.toggle.on { background: var(--accent); }
+.toggle.on::after { left: 19px; }
+
+.popup {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 3px 6px 3px 10px; border-radius: 7px;
+  background: var(--control); border: 0.5px solid var(--control-line);
+  color: var(--label); white-space: nowrap;
+}
+.popup::after { content: "⌃\A⌄"; white-space: pre; font-size: 8px; line-height: 6px; color: var(--secondary); }
+.button {
+  display: inline-block; padding: 4px 12px; border-radius: 7px;
+  background: var(--control); border: 0.5px solid var(--control-line); white-space: nowrap;
+}
+.button.primary { background: var(--accent); border-color: transparent; color: white; }
+.button.disabled { color: var(--tertiary); }
+.stepper { display: inline-flex; align-items: center; gap: 8px; }
+.stepper::before {
+  content: "⌃\A⌄"; white-space: pre; text-align: center; font-size: 9px; line-height: 8px;
+  width: 20px; padding: 3px 0; border-radius: 6px; background: var(--control);
+}
+.field {
+  padding: 4px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.25);
+  border: 0.5px solid var(--control-line); min-width: 150px; text-align: center;
+}
+.editor {
+  background: rgba(0, 0, 0, 0.28); border: 0.5px solid var(--control-line); border-radius: 8px;
+  padding: 10px 12px; white-space: pre-wrap; font-size: 11.5px; line-height: 1.45;
+}
+.progress { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.progress > i { display: block; height: 100%; background: var(--accent); }
+
+/* Menu bar and its menu */
+.menubar {
+  height: 26px; display: flex; align-items: center; justify-content: flex-end; gap: 16px;
+  padding: 0 14px; background: rgba(30, 32, 38, 0.75); font-size: 13px;
+}
+.menubar .active { background: rgba(255, 255, 255, 0.18); border-radius: 5px; padding: 1px 7px; }
+.menu {
+  background: var(--menu); border-radius: 11px; padding: 5px;
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+  min-width: 290px;
+}
+.item {
+  display: flex; justify-content: space-between; gap: 24px;
+  padding: 3px 10px; border-radius: 6px; white-space: nowrap;
+}
+.item.disabled { color: var(--secondary); }
+.item.highlighted { background: var(--accent); color: white; }
+.item .key { color: var(--secondary); }
+.item.highlighted .key { color: rgba(255, 255, 255, 0.8); }
+.separator { height: 0.5px; background: rgba(255, 255, 255, 0.12); margin: 5px 10px; }
+
+/* The floating indicator */
+.hud {
+  width: 340px; background: rgba(28, 29, 33, 0.94); border-radius: 16px;
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55); padding: 12px 14px;
+}
+
+/* A note pointing at part of a mockup */
+.callout {
+  font-size: 12px; color: rgba(255, 255, 255, 0.82);
+  background: rgba(10, 132, 255, 0.18); border: 1px solid rgba(10, 132, 255, 0.55);
+  border-radius: 8px; padding: 6px 9px; max-width: 220px; line-height: 1.35;
+}

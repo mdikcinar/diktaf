@@ -1,0 +1,84 @@
+<!doctype html><html lang="tr"><head><meta charset="utf-8"><link rel="stylesheet" href="mock.css"><style>
+.stage { padding: 30px 40px 44px; }
+
+.editor-window { width: 520px; opacity: 0.5; }
+.editor-window .body { padding: 14px 22px 70px; font-size: 13px; line-height: 1.55; color: var(--label); }
+.editor-window .body p { margin: 0; }
+.editor-window .body .muted { color: var(--secondary); }
+.caret { display: inline-block; width: 1.5px; height: 15px; background: var(--accent); vertical-align: -3px; }
+
+.hud {
+  position: relative; width: 380px; margin: -58px auto 0; padding: 12px 16px;
+  display: flex; flex-direction: column; gap: 8px;
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+}
+.hstack { display: flex; align-items: center; gap: 8px; }
+.spacer { flex: 1; }
+.headline { font-size: 13px; font-weight: 700; }
+.clock { font-size: 12px; color: var(--secondary); font-variant-numeric: tabular-nums; }
+.caption { font-size: 10px; color: var(--secondary); white-space: nowrap; }
+.caption2 { font-size: 10px; font-weight: 500; color: var(--tertiary); white-space: nowrap; }
+.mic { width: 14px; height: 14px; color: var(--red); }
+
+.meter-row { display: flex; align-items: center; gap: 10px; }
+.meter { flex: 1; height: 22px; display: flex; align-items: center; gap: 2px; }
+.meter i { display: block; width: 3px; border-radius: 1.5px; background: rgba(255, 69, 58, 0.85); }
+.meter i.q { background: rgba(255, 255, 255, 0.2); }
+
+.preview { display: flex; flex-direction: column; gap: 2px; }
+.preview .text { font-size: 13px; line-height: 1.32; }
+
+.controls .button {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; padding: 2px 9px 2px 7px; border-radius: 7px;
+}
+.controls .button svg { width: 9px; height: 9px; }
+.button.destructive { background: var(--red); border-color: transparent; color: white; }
+</style></head><body><div class="stage">
+  <div class="window editor-window">
+    <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div>Notlar</div>
+    <div class="body">
+      <p><b>Sürüm 2.4.1</b></p>
+      <p class="muted">Salı, 14:28</p>
+      <p>&nbsp;</p>
+      <p>• Giriş ekranındaki çökme düzeltildi</p>
+      <p>• Bildirim izni artık ilk açılışta soruluyor</p>
+      <p>• Crashlytics: <span class="caret"></span></p>
+    </div>
+  </div>
+
+  <div class="hud">
+    <div class="hstack">
+      <svg class="mic" viewBox="0 0 24 24"><rect x="8.25" y="1.5" width="7.5" height="13" rx="3.75" fill="currentColor"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      <span class="headline">Dinliyorum</span>
+      <span class="spacer"></span>
+      <span class="clock">00:07</span>
+    </div>
+
+    <div class="meter-row">
+      <div class="meter" id="meter"></div>
+      <span class="caption">Whisper · dil otomatik</span>
+    </div>
+
+    <div class="preview">
+      <span class="caption2">Önizleme — son hali durdurunca çıkar</span>
+      <span class="text">firebase cli ile deploy ettim ama crashlytics'te hâlâ eski sürüm görünüyor yani build numarasını</span>
+    </div>
+
+    <div class="hstack controls">
+      <span class="caption2">Ctrl+Alt+Space bitir · Ctrl+Alt+D iptal</span>
+      <span class="spacer"></span>
+      <span class="button destructive"><svg viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" rx="1.5" fill="currentColor"/></svg>Bitir</span>
+      <span class="button"><svg viewBox="0 0 10 10"><path d="M2 2l6 6M8 2L2 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>İptal</span>
+    </div>
+  </div>
+</div>
+<script>
+  // AppModel.meterLength bars, oldest first, drawn as LevelMeter draws them.
+  const levels = [0.03, 0.02, 0.31, 0.58, 0.79, 0.52, 0.36, 0.66, 0.88, 0.61, 0.28, 0.03,
+                  0.02, 0.42, 0.71, 0.55, 0.83, 0.64, 0.35, 0.47, 0.74, 0.93, 0.69, 0.41,
+                  0.22, 0.03, 0.38, 0.67, 0.86, 0.57, 0.49, 0.72];
+  document.getElementById('meter').innerHTML = levels
+    .map(l => `<i class="${l > 0.04 ? '' : 'q'}" style="height:${3 + l * 19}px"></i>`).join('');
+</script>
+</body></html>

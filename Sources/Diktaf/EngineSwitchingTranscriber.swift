@@ -96,6 +96,15 @@ actor EngineSwitchingTranscriber: Transcriber {
         }
     }
 
+    /// The last buffer's RMS in dBFS, and −∞ between dictations.
+    func inputDecibels() async -> Float {
+        switch active {
+        case .whisper: await whisper.inputDecibels()
+        case .system: await system.inputDecibels()
+        case nil: -.infinity
+        }
+    }
+
     /// How much the dictation in progress has recorded, and 0 between
     /// dictations.
     func recordedSeconds() async -> Double {

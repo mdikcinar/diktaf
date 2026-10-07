@@ -1,8 +1,10 @@
 # Diktaf
 
 Press a key, talk, press it again. A recogniser on this Mac turns the recording
-into text, a local model cleans it up by rules you wrote, and the result
+into text, a local model cleans it up by a prompt you wrote, and the result
 lands in your clipboard and is pasted into whatever window you were typing in.
+
+<img src="docs/images/indicator-listening.png" width="600" alt="The indicator while listening: a level meter, the elapsed time, a live preview of the words and buttons to finish or cancel, floating over a notes window">
 
 No API keys, and nothing leaves the machine. Two recognisers to choose between,
 both running here: Apple's own, which needs no download, and Whisper
@@ -24,25 +26,39 @@ Scripts/install.sh      # builds Diktaf.app, installs it, starts it at login
 switcher and never reaches an application. Every combination is yours to change
 in Settings.
 
+<img src="docs/images/menu-bar.png" width="600" alt="The menu bar menu: ready with the start shortcut, the recogniser and cleanup model in use, then start dictating, ask the agent, the agent window, settings and quit">
+
+<img src="docs/images/settings-shortcuts.png" width="600" alt="Settings, Shortcuts tab: one field per action; the agent field is waiting for a key">
+
 ## What it does
 
 **Dictation.** The recogniser runs on this Mac either way. The indicator shows
-the text arriving so you can see it is hearing you.
+the text arriving so you can see it is hearing you. Once you stop, it shows each
+step — recorded, transcribed, cleaned up by which model against which deadline,
+pasted where:
 
-**Cleanup rules.** Rules are your own sentences — *drop the filler words*, *keep
-my wording*, *no markdown* — each one switchable, plus a free-form instruction
-for anything else. They become the prompt handed to the local agent. Cleanup can
+<img src="docs/images/indicator-steps.png" width="600" alt="The indicator after the recording: recorded and transcribed are done, cleanup with gemma4:12b is running at 2.3 of 20 seconds, pasting into Notes is next">
+
+**Cleanup prompt.** One text field holds the whole prompt handed to the local
+agent — *drop the filler words*, *keep my wording*, *no markdown*, and whatever
+else you add. Diktaf adds only the dictation language to it. Cleanup can
 be switched off, in which case the raw transcript is pasted. If the agent fails
 or takes too long, the raw transcript is pasted anyway: a dictation that arrives
 uncleaned beats one that disappears.
 
+<img src="docs/images/settings-cleanup.png" width="600" alt="Settings, Cleanup tab: cleanup on, Ollama with gemma4:12b ready, a 20 second timeout, and the whole prompt in one editable field with a button to restore the shipped one">
+
 **Agent.** A dictation sent to the agent becomes a question rather than text to
 paste. The reply is shown, and the conversation can be continued or cleared.
+
+<img src="docs/images/agent-window.png" width="560" alt="The agent window: two spoken questions about Firebase logs, each with its answer and a Copy button, and a button to start a new conversation">
 
 ## Which recogniser
 
 Settings → General → Recognise with. Neither is better at everything, so pick on
 what you dictate.
+
+<img src="docs/images/settings-general.png" width="560" alt="Settings, General tab: Whisper selected with the full-precision model ready, the dictation language, where the text goes, ending on silence after 2.5 seconds, turning other audio down by 80 percent, the indicator, and the permissions">
 
 **The macOS recogniser** is the model behind the system's own dictation. Nothing
 to download, starts instantly, and words appear as you say them. Its weakness is
@@ -57,8 +73,8 @@ download costs:
 
 | Model | Download |
 | --- | --- |
+| Whisper large-v3-turbo, full precision (recommended) | 1639 MB |
 | Whisper large-v3-turbo | 646 MB |
-| Whisper large-v3-turbo, full precision | 1639 MB |
 | Whisper small | 217 MB |
 
 The weights land in `~/Library/Application Support/Diktaf/WhisperModels` and a
@@ -106,6 +122,7 @@ allowed to, macOS reports that it did and the text arrives nowhere.
 swift build                  # the package
 swift test                   # the domain and the agent adapters, offline
 Scripts/build-app.sh          # assembles build/Diktaf.app
+Scripts/render-mockups.sh     # redraws the README pictures from docs/mockups
 ```
 
 The layering is the point, and [ARCHITECTURE.md](ARCHITECTURE.md) is worth

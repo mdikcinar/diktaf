@@ -25,10 +25,10 @@ struct WhisperModelCatalogueTests {
     /// The model the whole feature was added for. If this stops being the
     /// recommendation it should be because somebody decided that, not because a
     /// list got reordered.
-    @Test("the recommended model is large-v3-turbo")
+    @Test("the recommended model is large-v3-turbo at full precision")
     func recommendedIsTurbo() {
         #expect(WhisperModelCatalogue.recommended.variant
-            == "openai_whisper-large-v3-v20240930_turbo_632MB")
+            == "openai_whisper-large-v3-v20240930_turbo")
     }
 
     @Test("every offered model is named once and describes itself")
@@ -67,7 +67,7 @@ struct WhisperModelCatalogueTests {
         let folder = catalogue.folder(for: WhisperModelCatalogue.recommended)
 
         #expect(folder.filePath == "/tmp/diktaf-test-base/models/argmaxinc/whisperkit-coreml/"
-                + "openai_whisper-large-v3-v20240930_turbo_632MB")
+                + "openai_whisper-large-v3-v20240930_turbo")
     }
 
     @Test("the default download base is somewhere the system will not empty")

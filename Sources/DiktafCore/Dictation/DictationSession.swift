@@ -380,21 +380,22 @@ public actor DictationSession {
                             deadlineSeconds: timeout, outcome: outcome)
         }
 
-        guard settings.cleanupEnabled, let refiner, !settings.rules.isEmpty else {
+        guard settings.cleanupEnabled, let refiner, !settings.cleanupPrompt.trimmed.isEmpty else {
             let reason: CleanupProgress.SkipReason =
-                !settings.cleanupEnabled ? .disabled : refiner == nil ? .noRefiner : .noRules
+                !settings.cleanupEnabled ? .disabled : refiner == nil ? .noRefiner : .noPrompt
             updateProgress { $0.cleanup = cleanupProgress(.skipped(reason)) }
             return raw
         }
 
         updateProgress { $0.cleanup = cleanupProgress(.running) }
         move(to: .refining)
-        let instruction = settings.rules.instruction(language: settings.language)
+        let instruction = CleanupInstruction.build(
+            prompt: settings.cleanupPrompt, language: settings.language)
 
         let outcome: Result<String, any Error>
         do {
             outcome = .success(try await withDeadline(seconds: timeout) {
-                try await refiner.refine(text: CleanupRuleSet.enclosing(raw), instruction: instruction)
+                try await refiner.refine(text: CleanupInstruction.enclosing(raw), instruction: instruction)
             })
         } catch {
             outcome = .failure(error)

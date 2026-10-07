@@ -1,0 +1,44 @@
+<!doctype html><html lang="tr"><head><meta charset="utf-8"><link rel="stylesheet" href="mock.css"><style>
+.stage { padding: 0; width: 600px; height: 268px; position: relative; overflow: hidden; }
+.menubar {
+  gap: 17px; padding-right: 14px; font-weight: 500;
+  background: linear-gradient(to right, rgba(30, 32, 38, 0) 0, rgba(30, 32, 38, 0.75) 170px);
+}
+.menubar > span { display: inline-flex; align-items: center; position: relative; height: 22px; }
+.menubar svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.menubar .active { padding: 0 7px; }
+.menubar .other:first-child { opacity: 0.45; }
+.dropdown {
+  position: absolute; left: 0; top: 27px; width: max-content;
+  font-weight: 400;
+}
+.dropdown .item { padding: 3px 10px 3px 12px; }
+</style></head><body><div class="stage">
+  <div class="menubar">
+    <span class="other"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="12" rx="2.5"/><path d="M8 20.5h8M12 17v3.5"/></svg></span>
+    <span class="other"><svg viewBox="0 0 24 24"><path d="M12 3.5l7 3v5.2c0 4.2-3 7.4-7 8.8-4-1.4-7-4.6-7-8.8V6.5z"/></svg></span>
+    <span class="active">
+      <svg viewBox="0 0 24 24"><rect x="8.75" y="2.5" width="6.5" height="11.5" rx="3.25"/><path d="M5.25 11a6.75 6.75 0 0 0 13.5 0M12 17.75V21.5"/></svg>
+      <div class="menu dropdown">
+        <div class="item disabled">Hazır — Ctrl+Alt+Space ile başlat</div>
+        <div class="item disabled">Whisper · dil otomatik · temizleme: gemma4:12b</div>
+        <div class="separator"></div>
+        <div class="item highlighted"><span>Dikteye başla</span><span class="key">⌘D</span></div>
+        <div class="item"><span>Agent'a sor</span></div>
+        <div class="item"><span>Agent penceresi</span></div>
+        <div class="separator"></div>
+        <div class="item"><span>Ayarlar…</span><span class="key">⌘,</span></div>
+        <div class="separator"></div>
+        <div class="item"><span>Diktaf'tan çık</span><span class="key">⌘Q</span></div>
+      </div>
+    </span>
+    <span><svg viewBox="0 0 24 24"><path d="M7 18.5h10.5a4 4 0 0 0 .6-7.95A5.5 5.5 0 0 0 7.4 9.6 4.5 4.5 0 0 0 7 18.5z"/></svg></span>
+    <span><svg viewBox="0 0 24 24"><path d="M3.5 9.5h3.2l4.6-4v13l-4.6-4H3.5z"/><path d="M15 9a4.2 4.2 0 0 1 0 6M17.9 6.4a8 8 0 0 1 0 11.2"/></svg></span>
+    <span><svg viewBox="0 0 28 16" style="width:26px"><rect x="1" y="2.5" width="22" height="11" rx="3.2"/><rect x="3" y="4.5" width="13" height="7" rx="1.6" fill="currentColor" stroke="none"/><path d="M25.5 6.3v3.4"/></svg></span>
+    <span><svg viewBox="0 0 24 24"><path d="M7 7.5l10 9-5 4.5v-18l5 4.5-10 9"/></svg></span>
+    <span><svg viewBox="0 0 24 24"><path d="M2.8 9.2a13.2 13.2 0 0 1 18.4 0M5.9 12.5a8.8 8.8 0 0 1 12.2 0M9 15.8a4.4 4.4 0 0 1 6 0"/><circle cx="12" cy="19" r="0.9" fill="currentColor"/></svg></span>
+    <span><svg viewBox="0 0 24 24" style="width:15px;height:15px"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.3 15.3L20.5 20.5"/></svg></span>
+    <span><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="6.5" rx="3.25"/><circle cx="17.75" cy="7.75" r="1.6" fill="currentColor"/><rect x="3" y="13" width="18" height="6.5" rx="3.25"/><circle cx="6.25" cy="16.25" r="1.6" fill="currentColor"/></svg></span>
+    <span>Sal 14:32</span>
+  </div>
+</div></body></html>

@@ -114,14 +114,13 @@ extension AppModel {
     }
 
     private func cleanupStep(_ progress: DictationProgress, now: Date) -> DictationStep {
-        let rules = settings.rules.activeRules.count
         guard let cleanup = progress.cleanup else {
             guard settings.cleanupEnabled else {
                 return DictationStep(id: "cleanup", status: .skipped, title: "Temizleme kapalı")
             }
             return DictationStep(
                 id: "cleanup", status: .waiting, title: "Temizlenecek",
-                details: ["\(plannedCleanupLabel) · \(rules) kural"])
+                details: [plannedCleanupLabel])
         }
 
         switch cleanup.outcome {
@@ -130,7 +129,7 @@ extension AppModel {
             return DictationStep(
                 id: "cleanup", status: .active, title: "Temizleniyor",
                 trailing: "\(Self.seconds(elapsed, unit: false)) / \(cleanup.deadlineSeconds) sn",
-                details: ["\(cleanupLabel) · \(rules) kural"],
+                details: [cleanupLabel],
                 quote: progress.rawTranscript.map { "“\($0)”" },
                 warning: cleanupChoice?.fallbackReason.map { "\($0) — Claude devraldı." })
         case .cleaned(let text, let finished):
@@ -150,7 +149,7 @@ extension AppModel {
         case .skipped(let reason):
             let why = switch reason {
             case .disabled: "Ayarlarda kapalı."
-            case .noRules: "Etkin kural yok."
+            case .noPrompt: "Talimat boş."
             case .noRefiner: "Temizleyici yok."
             }
             return DictationStep(

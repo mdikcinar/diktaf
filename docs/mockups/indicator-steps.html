@@ -1,0 +1,98 @@
+<!doctype html><html lang="tr"><head><meta charset="utf-8"><link rel="stylesheet" href="mock.css"><style>
+.stage { padding: 30px 40px 44px; }
+
+.editor-window { width: 520px; opacity: 0.5; }
+.editor-window .body { padding: 14px 22px 70px; font-size: 13px; line-height: 1.55; color: var(--label); }
+.editor-window .body p { margin: 0; }
+.editor-window .body .muted { color: var(--secondary); }
+.caret { display: inline-block; width: 1.5px; height: 15px; background: var(--accent); vertical-align: -3px; }
+
+.hud {
+  position: relative; width: 380px; margin: -58px auto 0; padding: 12px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+}
+.steps { display: flex; flex-direction: column; gap: 7px; }
+.step { display: flex; flex-direction: column; gap: 3px; }
+.step .line { display: flex; align-items: center; gap: 8px; }
+.step .marker { width: 16px; height: 16px; flex: none; display: flex; align-items: center; justify-content: center; }
+.step .marker svg { width: 14px; height: 14px; }
+.step .marker svg.spinner { width: 12px; height: 12px; }
+.step .label { flex: 1; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.step .title { font-size: 13px; flex: 1; }
+.step.active .title { font-weight: 600; }
+.step.waiting .title { color: var(--secondary); }
+.step .trailing { font-size: 10px; color: var(--secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.step .detail, .step .quote { font-size: 10px; padding-left: 24px; }
+.step .detail { color: var(--secondary); }
+.step .quote {
+  color: var(--tertiary); font-style: italic;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+.controls { display: flex; justify-content: flex-end; }
+.controls .button {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; padding: 2px 9px 2px 7px; border-radius: 7px;
+}
+.controls .button svg { width: 9px; height: 9px; }
+</style></head><body><div class="stage">
+  <div class="window editor-window">
+    <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div>Notlar</div>
+    <div class="body">
+      <p><b>Sürüm 2.4.1</b></p>
+      <p class="muted">Salı, 14:28</p>
+      <p>&nbsp;</p>
+      <p>• Giriş ekranındaki çökme düzeltildi</p>
+      <p>• Bildirim izni artık ilk açılışta soruluyor</p>
+      <p>• Crashlytics: <span class="caret"></span></p>
+    </div>
+  </div>
+
+  <div class="hud">
+    <div class="steps">
+      <div class="step done">
+        <div class="line">
+          <span class="marker"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.5" fill="var(--green)"/><path d="M4.6 8.3l2.3 2.3 4.5-4.9" fill="none" stroke="#1c1d21" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="label"><span class="title">Kayıt alındı</span><span class="trailing">11,6 sn</span></span>
+        </div>
+      </div>
+
+      <div class="step done">
+        <div class="line">
+          <span class="marker"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.5" fill="var(--green)"/><path d="M4.6 8.3l2.3 2.3 4.5-4.9" fill="none" stroke="#1c1d21" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="label"><span class="title">Metne çevrildi</span><span class="trailing">20 kelime · 1,4 sn</span></span>
+        </div>
+      </div>
+
+      <div class="step active">
+        <div class="line">
+          <span class="marker"><svg class="spinner" id="spinner" viewBox="0 0 16 16"></svg></span>
+          <span class="label"><span class="title">Temizleniyor</span><span class="trailing">2,3 / 20 sn</span></span>
+        </div>
+        <div class="detail">gemma4:12b (Ollama)</div>
+        <div class="quote">“firebase cli ile deploy ettim ama crashlytics'te hâlâ eski sürüm görünüyor yani build numarasını artırmayı unutmuş olabilirim bir bakar mısın”</div>
+      </div>
+
+      <div class="step waiting">
+        <div class="line">
+          <span class="marker"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.8" fill="none" stroke="var(--tertiary)" stroke-width="1.3"/></svg></span>
+          <span class="label"><span class="title">Yapıştırılacak</span><span class="trailing">→ Notlar</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <span class="button"><svg viewBox="0 0 10 10"><path d="M2 2l6 6M8 2L2 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>İptal</span>
+    </div>
+  </div>
+</div>
+<script>
+  // The spinning ProgressView, frozen mid-turn.
+  document.getElementById('spinner').innerHTML = Array.from({ length: 8 }, (_, i) => {
+    const a = i * Math.PI / 4, c = Math.cos(a), s = Math.sin(a);
+    return `<line x1="${8 + 3.6 * c}" y1="${8 + 3.6 * s}" x2="${8 + 7 * c}" y2="${8 + 7 * s}"
+      stroke="white" stroke-width="1.9" stroke-linecap="round" opacity="${(0.18 + 0.82 * ((8 - i) % 8 || 8) / 8).toFixed(2)}"/>`;
+  }).join('');
+</script>
+</body></html>

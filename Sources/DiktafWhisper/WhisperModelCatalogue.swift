@@ -50,8 +50,7 @@ public struct WhisperModelCatalogue: Sendable {
     /// WhisperKit expects and the only ones it can load without a custom repo.
     public static let repository = "argmaxinc/whisperkit-coreml"
 
-    /// The models offered, largest first is *not* the order: the recommended one
-    /// leads, because a list sorted by size invites picking on size alone.
+    /// The models offered, the recommended one first.
     ///
     /// Three rather than the repository's twenty-nine. The rest are either worse
     /// at the same size, English-only — which for a Turkish dictation is not a
@@ -59,21 +58,21 @@ public struct WhisperModelCatalogue: Sendable {
     /// outright.
     public static let choices: [WhisperModel] = [
         WhisperModel(
-            variant: "openai_whisper-large-v3-v20240930_turbo_632MB",
-            label: "Whisper large-v3-turbo",
-            detail: """
-            Önerilen model. Neural Engine için sıkıştırılmış; Türkçe bir \
-            cümledeki teknik kelimeleri duyan da bu.
-            """,
-            megabytes: 646),
-        WhisperModel(
             variant: "openai_whisper-large-v3-v20240930_turbo",
             label: "Whisper large-v3-turbo, tam hassasiyet",
             detail: """
-            Aynı model, sıkıştırmasız. Biraz daha isabetli; indirmesi iki buçuk \
-            kat büyük, yüklenmesi daha yavaş.
+            Önerilen model. Sıkıştırmasız; Türkçe bir cümledeki teknik kelimeleri \
+            en iyi duyan bu. İndirmesi büyük, yüklenmesi birkaç saniye sürer.
             """,
             megabytes: 1639),
+        WhisperModel(
+            variant: "openai_whisper-large-v3-v20240930_turbo_632MB",
+            label: "Whisper large-v3-turbo",
+            detail: """
+            Aynı model, Neural Engine için sıkıştırılmış. İndirmesi iki buçuk kat \
+            küçük, yüklenmesi daha hızlı; biraz daha az isabetli.
+            """,
+            megabytes: 646),
         WhisperModel(
             variant: "openai_whisper-small_216MB",
             label: "Whisper small",

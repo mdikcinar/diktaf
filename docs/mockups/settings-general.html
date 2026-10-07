@@ -1,0 +1,95 @@
+<!doctype html><html lang="tr"><head><meta charset="utf-8"><link rel="stylesheet" href="mock.css"><style>
+.form > .section-header:first-child { margin-top: 12px; }
+.row.text { display: block; padding: 10px 14px; line-height: 1.4; }
+.found { display: inline-flex; align-items: center; gap: 5px; color: var(--green); }
+.found svg { width: 15px; height: 15px; }
+.controls { display: flex; align-items: center; gap: 12px; }
+.button.small { font-size: 11px; padding: 2px 9px; border-radius: 6px; }
+.slider { position: relative; width: 180px; height: 20px; flex: none; }
+.slider .track { position: absolute; left: 0; right: 0; top: 8px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.16); }
+.slider .fill { position: absolute; left: 0; top: 8px; height: 4px; border-radius: 2px; background: var(--accent); }
+.slider .ticks {
+  position: absolute; left: 10.25px; width: 160px; top: 15px; height: 3px;
+  background: repeating-linear-gradient(to right, rgba(255, 255, 255, 0.28) 0 1.5px, transparent 1.5px 8.78px);
+}
+.slider .knob {
+  position: absolute; top: 3px; width: 22px; height: 14px; margin-left: -11px; border-radius: 7px;
+  background: #e9e9ea; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), 0 0 0 0.5px rgba(0, 0, 0, 0.3);
+}
+.amount { display: flex; align-items: center; gap: 8px; }
+.amount .percent { width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
+</style></head><body><div class="stage">
+<div class="window" style="width:640px">
+  <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div>Genel</div>
+  <div class="tabs">
+    <div class="tab selected"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="6.6"/><path d="M12 2.6v2.8M12 18.6v2.8M2.6 12h2.8M18.6 12h2.8M5.4 5.4l2 2M16.6 16.6l2 2M5.4 18.6l2-2M16.6 7.4l2-2"/></svg>Genel</div>
+    <div class="tab"><svg viewBox="0 0 24 24"><path d="M4 20 15 9"/><path d="M14 3.5v3M12.5 5h3M19 9v3M17.5 10.5h3M19.5 3v2M18.5 4h2"/></svg>Temizleme</div>
+    <div class="tab"><svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h1M9.5 10h1M13 10h1M16.5 10h1M6 14h1M9 14h6M17 14h1"/></svg>Kısayollar</div>
+    <div class="tab"><svg viewBox="0 0 24 24"><path d="M3 5h11v7H8l-3 2.5V12H3z"/><path d="M10 14v1.5h6l3 2.5v-2.5h2v-7h-4"/></svg>Agent</div>
+  </div>
+  <div class="form">
+    <div class="section-header">Tanıyıcı</div>
+    <div class="group">
+      <div class="row">Ses tanıyıcı <span class="popup">Whisper, bu Mac'te</span></div>
+      <div class="row">Model <span class="popup">Whisper large-v3-turbo, tam hassasiyet — 1639 MB</span></div>
+      <div class="row">Model dosyaları
+        <div class="controls">
+          <span class="found"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M4.9 8.2l2.1 2.1 4.1-4.5" stroke="#2a2b2f" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>Hazır</span>
+          <span class="button small">Kaldır</span>
+        </div>
+      </div>
+      <div class="row text caption">Önerilen model. Sıkıştırmasız; Türkçe bir cümledeki teknik kelimeleri en iyi duyan bu. İndirmesi büyük, yüklenmesi birkaç saniye sürer.</div>
+    </div>
+    <div class="footer">Whisper, Core ML ile bu Mac'te çalışır; hiçbir şey dışarı çıkmaz. Yazılım terimlerini desteklediği her dilde tanır — seçilmesinin nedeni bu. Bedeli: bir kerelik indirme, yeniden başlatmadan sonra birkaç saniyelik yükleme ve göstergede kelime kelime değil kaba bir önizleme. Asıl metin, konuşmanız bitince tek geçişte çıkarılır.</div>
+
+    <div class="section-header">Dil</div>
+    <div class="group">
+      <div class="row">Dikte dili <span class="popup">Sistemle aynı — Türkçe (Türkiye)</span></div>
+    </div>
+    <div class="footer">Tek bir Whisper modeli bildiği her dili kapsar; bu dil için ayrıca indirilecek bir şey yok. Yine de dili seçmek işe yarar: kendi haline bırakılan Whisper dili ilk birkaç saniyeden tahmin eder ve İngilizce bir ürün adıyla başlayan cümlede tam da bunu yanlış yapar.</div>
+
+    <div class="section-header">Metin nereye gider</div>
+    <div class="group">
+      <div class="row">Metni <span class="popup" style="min-width:118px; justify-content:space-between">Yapıştır</span></div>
+      <div class="row text caption">Hızlı ve neredeyse her zaman istediğiniz bu. Panoyu kullanır.</div>
+    </div>
+
+    <div class="section-header">Kaydı bitirme</div>
+    <div class="group">
+      <div class="row">Sessizlikte kendiliğinden bitir <span class="toggle on"></span></div>
+      <div class="row">Ne kadar sessizlik <span class="stepper">2,5 sn</span></div>
+    </div>
+    <div class="footer">Konuşmaya başladıktan sonra bu kadar sessizlik olunca dikte biter, tuşa yeniden basmışsınız gibi. Konuşmadan önceki sessizlik sayılmaz. Göstergede geri sayım görünür; konuşmaya devam ederseniz sıfırlanır.</div>
+
+    <div class="section-header">Arka plan sesi</div>
+    <div class="group">
+      <div class="row">Dinlerken diğer sesleri kıs <span class="toggle on"></span></div>
+      <div class="row">Ne kadar kısılsın
+        <div class="amount">
+          <div class="slider"><i class="track"></i><i class="ticks"></i><i class="fill" style="width:77.8%"></i><i class="knob" style="left:calc(11px + 158px * 0.7778)"></i></div>
+          <span class="percent">%80</span>
+        </div>
+      </div>
+    </div>
+    <div class="footer">Dinleme başlayınca Mac'in ses çıkışı bu oranda yavaşça kısılır, kayıt bitince ya da iptal edilince yavaşça eski seviyesine döner. Kayıt sırasında sesi elle değiştirirseniz sizin ayarınıza dokunulmaz.</div>
+
+    <div class="section-header">Gösterge</div>
+    <div class="group">
+      <div class="row">Kayıt sırasında göster <span class="toggle on"></span></div>
+    </div>
+
+    <div class="section-header">İzinler</div>
+    <div class="group">
+      <div class="row">Mikrofon
+        <span class="found"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M4.9 8.2l2.1 2.1 4.1-4.5" stroke="#2a2b2f" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>İzin verildi</span>
+      </div>
+      <div class="row">Konuşma tanıma
+        <span class="found"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M4.9 8.2l2.1 2.1 4.1-4.5" stroke="#2a2b2f" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>İzin verildi</span>
+      </div>
+      <div class="row">Tuşlara basma (yapıştırmak için)
+        <span class="found"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M4.9 8.2l2.1 2.1 4.1-4.5" stroke="#2a2b2f" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>İzin verildi</span>
+      </div>
+    </div>
+  </div>
+</div>
+</div></body></html>

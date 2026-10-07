@@ -11,7 +11,7 @@ import Observation
 /// which port.
 ///
 /// Also the one object the interface talks to. It holds no rules of its own: the
-/// flow belongs to `DictationSession`, the prompt to `CleanupRuleSet`, the
+/// flow belongs to `DictationSession`, the prompt to `CleanupInstruction`, the
 /// conversation to `AgentConversation`. What is here is wiring, and the mirror of
 /// the session's state that SwiftUI can observe.
 @MainActor
@@ -392,8 +392,10 @@ final class AppModel {
         meter = Task { [weak self, transcriber] in
             var silence = SilenceDetector()
             var stopped = false
+            var heardCharacters = 0
             while !Task.isCancelled {
                 let level = await transcriber.inputLevel()
+                let decibels = await transcriber.inputDecibels()
                 let seconds = await transcriber.recordedSeconds()
                 let load = await transcriber.whisperLoadState()
                 guard let self, !Task.isCancelled else { return }
@@ -407,12 +409,18 @@ final class AppModel {
                 if self.hearsNothing != silent { self.hearsNothing = silent }
 
                 let now = Date()
-                silence.observe(level: level, at: now)
+                if case .recording(let text, _) = self.state, text.count > heardCharacters {
+                    heardCharacters = text.count
+                    silence.heardWords()
+                }
+                silence.observe(decibels: decibels, at: now)
                 if self.silenceSince != silence.quietSince { self.silenceSince = silence.quietSince }
                 if !stopped, self.settings.silenceStopEnabled,
                    let quiet = silence.quiet(at: now), quiet >= self.silenceStopDelay {
                     stopped = true
-                    Diagnostics.event(String(format: "stopping after %.1fs of quiet", quiet))
+                    Diagnostics.event(String(
+                        format: "stopping after %.1fs of quiet, room at %.0f dBFS",
+                        quiet, silence.room ?? -.infinity))
                     self.finishOnSilence()
                 }
                 try? await Task.sleep(for: .milliseconds(50))
@@ -550,7 +558,23 @@ final class AppModel {
 
     // MARK: - Shortcuts
 
+    /// How many shortcut fields are waiting for a key. The keys are let go while
+    /// any is: Carbon hands a registered combination to its action before the
+    /// field ever sees it, so pressing the dictation key there started one.
+    private var shortcutsBeingRecorded = 0
+
+    func beginRecordingShortcut() {
+        shortcutsBeingRecorded += 1
+        hotkeys.unbindAll()
+    }
+
+    func endRecordingShortcut() {
+        shortcutsBeingRecorded = max(0, shortcutsBeingRecorded - 1)
+        registerShortcuts()
+    }
+
     private func registerShortcuts() {
+        guard shortcutsBeingRecorded == 0 else { return }
         let wanted = settings.bindings.filter { binding in
             // The agent key is not registered while the feature is off, so that
             // the combination is free for whatever else wants it.

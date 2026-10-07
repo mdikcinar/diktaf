@@ -70,6 +70,13 @@ public actor SystemTranscriber: Transcriber {
         meter?.level ?? 0
     }
 
+    /// The same, unscaled and unsmoothed: the last buffer's RMS in dBFS, and −∞
+    /// when nothing is being recorded. For telling speech from the room, which
+    /// the meter's floor would hide at a low input volume.
+    public func inputDecibels() -> Float {
+        meter?.decibels ?? -.infinity
+    }
+
     /// How much has been recorded so far in this dictation, and 0 when nothing
     /// is being recorded.
     public func recordedSeconds() -> Double {
@@ -419,6 +426,7 @@ private final class PendingInput: @unchecked Sendable {
 /// writes, and a reading one buffer stale is still the right reading.
 final class InputMeter: Sendable {
     private let levelBits = Atomic<UInt32>(0)
+    private let decibelBits = Atomic<UInt32>((-Float.infinity).bitPattern)
     private let frames = Atomic<Int>(0)
     private let sampleRate: Double
 
@@ -447,9 +455,12 @@ final class InputMeter: Sendable {
         let rms = (sumOfSquares / Float(count)).squareRoot()
         let next = max(Self.level(ofRMS: rms), level * Self.meterDecay)
         levelBits.store(next.bitPattern, ordering: .relaxed)
+        decibelBits.store((20 * log10(rms)).bitPattern, ordering: .relaxed)
     }
 
     var level: Float { Float(bitPattern: levelBits.load(ordering: .relaxed)) }
+
+    var decibels: Float { Float(bitPattern: decibelBits.load(ordering: .relaxed)) }
 
     var seconds: Double {
         sampleRate > 0 ? Double(frames.load(ordering: .relaxed)) / sampleRate : 0

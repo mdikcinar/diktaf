@@ -4,7 +4,7 @@ import Foundation
 /// Cleanup, done by the `claude` CLI already signed in on this machine.
 ///
 /// One shot with no memory and a short deadline. It never builds a prompt: the
-/// instruction it is handed was built from the user's rules in the domain, which
+/// instruction it is handed was built from the user's prompt in the domain, which
 /// is also what makes it worth caching — an instruction that is the same from one
 /// dictation to the next is a prefix the service has already seen, so the first
 /// cleanup of the hour pays for it and the rest do not.

@@ -1,0 +1,41 @@
+<!doctype html><html lang="tr"><head><meta charset="utf-8"><link rel="stylesheet" href="mock.css"><style>
+.form > .group:first-child { margin-top: 14px; }
+.recorder { display: flex; align-items: center; gap: 6px; }
+.recorder .button {
+  min-width: 150px; text-align: center; padding: 3px 12px; border-radius: 8px;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 12.5px;
+}
+.recorder .button.recording { color: var(--accent); }
+.clear { width: 15px; height: 15px; color: var(--tertiary); flex: none; }
+.clear.hidden { visibility: hidden; }
+.footer p { margin: 0; }
+.footer p + p { margin-top: 4px; }
+</style></head><body><div class="stage">
+<div class="window" style="width:640px">
+  <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div>Kısayollar</div>
+  <div class="tabs">
+    <div class="tab"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="6.6"/><path d="M12 2.6v2.8M12 18.6v2.8M2.6 12h2.8M18.6 12h2.8M5.4 5.4l2 2M16.6 16.6l2 2M5.4 18.6l2-2M16.6 7.4l2-2"/></svg>Genel</div>
+    <div class="tab"><svg viewBox="0 0 24 24"><path d="M4 20 15 9"/><path d="M14 3.5v3M12.5 5h3M19 9v3M17.5 10.5h3M19.5 3v2M18.5 4h2"/></svg>Temizleme</div>
+    <div class="tab selected"><svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h1M9.5 10h1M13 10h1M16.5 10h1M6 14h1M9 14h6M17 14h1"/></svg>Kısayollar</div>
+    <div class="tab"><svg viewBox="0 0 24 24"><path d="M3 5h11v7H8l-3 2.5V12H3z"/><path d="M10 14v1.5h6l3 2.5v-2.5h2v-7h-4"/></svg>Agent</div>
+  </div>
+  <div class="form">
+    <div class="group">
+      <div class="row">Dikteye başla / bitir
+        <div class="recorder"><span class="button">Ctrl+Alt+Space</span><svg class="clear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="#2a2b2f" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg></div>
+      </div>
+      <div class="row">Kaydı at
+        <div class="recorder"><span class="button">Ctrl+Alt+D</span><svg class="clear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="#2a2b2f" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg></div>
+      </div>
+      <div class="row">Agent'a sor
+        <div class="recorder"><span class="button recording">Bir tuşa basın…</span><svg class="clear hidden" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/></svg></div>
+      </div>
+    </div>
+    <div class="footer">
+      <p>Bir kısayola tıklayın, sonra istediğiniz tuşlara basın. Boştaki bir fare düğmesi de olur: orta düğme ya da ondan sonrakiler.</p>
+      <p>Esc eskisini korur, Delete siler. Sol ve sağ fare düğmeleri sunulmaz: onlardan birine atanırsa hiçbir şeye tıklayamazsınız.</p>
+      <p>Ctrl+Space de çalışmaz: macOS onu giriş kaynağını değiştirmeye ayırır, oraya atanan kısayol hiç ulaşmaz.</p>
+    </div>
+  </div>
+</div>
+</div></body></html>
