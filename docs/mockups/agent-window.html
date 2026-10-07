@@ -1,0 +1,37 @@
+<!doctype html><html lang="tr"><head><meta charset="utf-8"><link rel="stylesheet" href="mock.css"><style>
+.conversation { padding: 8px 18px 18px; display: flex; flex-direction: column; gap: 20px; }
+.turn { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.prompt { font-weight: 700; }
+.reply { white-space: pre-line; line-height: 1.4; }
+.copy { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--accent); }
+.copy svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 1.4; }
+.bar {
+  display: flex; justify-content: flex-end; align-items: center; padding: 10px;
+  border-top: 0.5px solid rgba(255, 255, 255, 0.12);
+}
+</style></head><body><div class="stage">
+<div class="window" style="width:560px">
+  <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div>Agent</div>
+  <div class="conversation">
+    <div class="turn">
+      <div class="prompt">firebase'de bir fonksiyonun loglarını terminalden nasıl görürüm</div>
+      <div class="reply">Firebase CLI ile görebilirsiniz:
+
+firebase functions:log
+
+Projedeki fonksiyonların en son log kayıtlarını terminale yazdırır. Birden fazla projeniz varsa önce firebase use ile doğru projeyi seçin.</div>
+      <div class="copy"><svg viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="9" rx="1.6"/><path d="M10.5 3.5V3a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3v6.5A1.5 1.5 0 0 0 4 11h1.5"/></svg>Kopyala</div>
+    </div>
+    <div class="turn">
+      <div class="prompt">peki sadece bir fonksiyonun son 50 satırını görmek istersem</div>
+      <div class="reply">--only ile fonksiyonun adını, --lines ile kaç satır istediğinizi verin:
+
+firebase functions:log --only sendWelcomeEmail --lines 50
+
+Adı kodda dışa aktardığınız hâliyle yazın. Birkaç fonksiyonun loglarını birlikte görmek için adları virgülle ayırabilirsiniz.</div>
+      <div class="copy"><svg viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="9" rx="1.6"/><path d="M10.5 3.5V3a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3v6.5A1.5 1.5 0 0 0 4 11h1.5"/></svg>Kopyala</div>
+    </div>
+  </div>
+  <div class="bar"><span class="button">Yeni konuşma başlat</span></div>
+</div>
+</div></body></html>
