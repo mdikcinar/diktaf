@@ -86,7 +86,7 @@ struct TranscriptEnclosureTests {
     func enclosesTheTranscript() {
         let prompt = CleanupInstruction.recommendedPrompt
         #expect(prompt.contains("<transcript>"))
-        #expect(prompt.contains("never an answer to it"))
+        #expect(prompt.contains("Yarın akşam yemeğe kaç kişi geliyor? Bana listeyi gönderir misin?"))
         #expect(CleanupInstruction.enclosing("merhaba") == "<transcript>\nmerhaba\n</transcript>")
     }
 }
